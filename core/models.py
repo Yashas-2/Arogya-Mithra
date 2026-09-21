@@ -271,7 +271,8 @@ class MedicalReport(models.Model):
         return encrypted_content
     
     def decrypt_file(self):
-        """Decrypt file for authorized viewing — works with local, Cloudinary, and any storage backend"""
+        """Decrypt file for authorized viewing — works with Cloudinary, local, and any storage backend"""
+        import io
         import logging
         logger = logging.getLogger(__name__)
 
@@ -283,13 +284,50 @@ class MedicalReport(models.Model):
             logger.error(f"Report {self.id}: report_file is None")
             return None
 
-        try:
-            # Use storage backend's open() — works with Cloudinary, S3, local, etc.
-            raw_file = self.report_file.open('rb')
-            encrypted_content = raw_file.read()
-            raw_file.close()
-            logger.info(f"Report {self.id}: Read {len(encrypted_content)} bytes via storage backend")
+        encrypted_content = None
 
+        # Method 1: Cloudinary signed URL
+        try:
+            import cloudinary.utils
+            url, _ = cloudinary.utils.cloudinary_url(
+                self.report_file.name,
+                resource_type='raw',
+                type='authenticated',
+                sign_url=True
+            )
+            import requests
+            resp = requests.get(url, timeout=30)
+            resp.raise_for_status()
+            encrypted_content = resp.content
+            logger.info(f"Report {self.id}: Read {len(encrypted_content)} bytes via Cloudinary signed URL")
+        except Exception as e:
+            logger.warning(f"Report {self.id}: Cloudinary signed URL failed: {e}")
+
+        # Method 2: Storage backend open()
+        if not encrypted_content:
+            try:
+                raw_file = self.report_file.open('rb')
+                encrypted_content = raw_file.read()
+                raw_file.close()
+                logger.info(f"Report {self.id}: Read {len(encrypted_content)} bytes via storage backend")
+            except Exception as e:
+                logger.warning(f"Report {self.id}: Storage backend failed: {e}")
+
+        # Method 3: Direct file path (local)
+        if not encrypted_content:
+            try:
+                with open(self.report_file.path, 'rb') as f:
+                    encrypted_content = f.read()
+                logger.info(f"Report {self.id}: Read {len(encrypted_content)} bytes via local file")
+            except Exception as e:
+                logger.error(f"Report {self.id}: All file access methods failed. Last error: {e}")
+                return None
+
+        if not encrypted_content:
+            logger.error(f"Report {self.id}: Could not read file from any source")
+            return None
+
+        try:
             f = Fernet(self.encrypted_file_key.encode())
             decrypted = f.decrypt(encrypted_content)
             logger.info(f"Report {self.id}: Decrypted successfully, {len(decrypted)} bytes")

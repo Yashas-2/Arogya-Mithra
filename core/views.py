@@ -231,38 +231,21 @@ def analyze_medical_report(request):
         report_text = ''
         pdf_bytes = None
 
-        # Try decryption via model method (works with Cloudinary + local)
+        # Try decryption via model method (handles Cloudinary, local, storage backend)
         try:
             decrypted = report.decrypt_file()
             if decrypted:
                 pdf_bytes = decrypted
+                print(f"[SWASTHYA] Report {report.id}: Decrypted {len(pdf_bytes)} bytes successfully")
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).error(f"decrypt_file() failed for report {report.id}: {e}")
+            print(f"[SWASTHYA] Report {report.id}: decrypt_file() exception: {e}")
 
-        # If decrypt failed, try reading the file directly via storage backend
         if not pdf_bytes:
-            try:
-                raw_file = report.report_file.open('rb')
-                raw = raw_file.read()
-                raw_file.close()
-                if raw[:5] == b'%PDF-':
-                    pdf_bytes = raw
-                else:
-                    # File is encrypted but decrypt failed — cannot proceed
-                    return Response({
-                        'success': False,
-                        'error': 'REPORT_DECRYPTION_FAILED',
-                        'message': 'The report could not be decrypted. Please contact support or re-upload the report.'
-                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            except Exception as e:
-                import logging
-                logging.getLogger(__name__).error(f"Direct file read failed for report {report.id}: {e}")
-                return Response({
-                    'success': False,
-                    'error': 'REPORT_FILE_NOT_FOUND',
-                    'message': 'The report file could not be accessed. It may have been removed during a server restart. Please re-upload the report.'
-                }, status=status.HTTP_404_NOT_FOUND)
+            return Response({
+                'success': False,
+                'error': 'REPORT_DECRYPTION_FAILED',
+                'message': 'The report could not be decrypted or accessed. Please re-upload the report.'
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         if not pdf_bytes:
             return Response({

@@ -733,36 +733,17 @@ def patient_view_report(request, report_id):
     logger = logging.getLogger(__name__)
 
     if report.is_encrypted:
-        logger.info(f"Attempting to decrypt report {report.id}")
-
-        # Step 1: Try decrypt_file() method
         decrypted_content = report.decrypt_file()
         if decrypted_content:
-            logger.info(f"Successfully decrypted report {report.id}, content length: {len(decrypted_content)}")
+            logger.info(f"Successfully decrypted report {report.id}, {len(decrypted_content)} bytes")
             response = HttpResponse(decrypted_content, content_type='application/pdf')
             response['Content-Disposition'] = f'inline; filename="{report.title}.pdf"'
             return response
 
-        # Step 2: Try reading raw file via storage backend (works with Cloudinary)
-        logger.warning(f"decrypt_file() failed for report {report.id}, trying storage backend")
-        try:
-            raw_file = report.report_file.open('rb')
-            raw_content = raw_file.read()
-            raw_file.close()
-            if raw_content[:5] == b'%PDF-':
-                logger.info(f"Raw file is valid PDF, serving unencrypted report {report.id}")
-                response = HttpResponse(raw_content, content_type='application/pdf')
-                response['Content-Disposition'] = f'inline; filename="{report.title}.pdf"'
-                return response
-            else:
-                logger.error(f"Report {report.id}: File is not a valid PDF (starts with {raw_content[:10]})")
-        except Exception as e:
-            logger.error(f"Storage backend read failed for report {report.id}: {e}")
-
         return Response({
             'success': False,
             'error': 'REPORT_DECRYPTION_FAILED',
-            'message': 'The report could not be decrypted. Please contact support or re-upload the report.'
+            'message': 'The report could not be decrypted. Please re-upload the report.'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     else:
         # For non-encrypted files, use the existing approach
