@@ -144,11 +144,11 @@ CLOUDINARY_API_SECRET = config('CLOUDINARY_API_SECRET', default='')
 
 if CLOUDINARY_CLOUD_NAME:
     CLOUDINARY_STORAGE = {
-        'Cloud_name': CLOUDINARY_CLOUD_NAME,
+        'cloud_name': CLOUDINARY_CLOUD_NAME,
         'api_key': CLOUDINARY_API_KEY,
         'api_secret': CLOUDINARY_API_SECRET,
     }
-    DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+    DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.RawMediaCloudinaryStorage'
 
 # Gemini AI Configuration
 GEMINI_API_KEY = config('GEMINI_API_KEY', default='YOUR_GEMINI_API_KEY_HERE')

@@ -250,22 +250,24 @@ document.getElementById('analyzeBtn').addEventListener('click', async function()
         if (result.success) {
             displayAnalysisResults(result.data);
         } else {
+            // Stop loading on error
+            document.getElementById('loadingAnalysis').style.display = 'none';
+            document.getElementById('selectCard').style.display = 'block';
+            
             if (result.upgrade_required) {
                 if (confirm(result.error + '\n\nUpgrade to Premium now?')) {
                     window.location.href = '/premium/';
                 }
-            } else if (result.sample) {
-                // Show sample results with appropriate message
-                alert('Analysis took longer than expected. Showing sample results.');
-                displayAnalysisResults(getSampleAnalysisData(language));
             } else {
-                alert('Error: ' + result.error);
-                location.reload();
+                const msg = result.message || result.error || 'Unknown error';
+                alert('Error: ' + msg);
             }
         }
     } catch (error) {
-        alert('Error analyzing report. Please try again.');
-        location.reload();
+        // Stop loading on network/parse error
+        document.getElementById('loadingAnalysis').style.display = 'none';
+        document.getElementById('selectCard').style.display = 'block';
+        alert('Error analyzing report: ' + error.message);
     }
 });
 
@@ -327,38 +329,6 @@ function displayAnalysisResults(data) {
     
     // Doctor Suggestion
     document.getElementById('doctorSuggestion').textContent = data.doctor_visit_suggestion;
-}
-
-// Add this helper function at the end of the script block
-function getSampleAnalysisData(language) {
-    return {
-        "patient_summary": language === 'English' ? 
-            "This is a sample analysis. Actual analysis provides detailed insights." : 
-            "ಇದು ಒಂದು ಉದಾಹರಣೆ ವಿಶ್ಲೇಷಣೆ. ವಾಸ್ತವಿಕ ವಿಶ್ಲೇಷಣೆಯು ವಿಸ್ತೃತ ಮಾಹಿತಿಯನ್ನು ಒದಗಿಸುತ್ತದೆ.",
-        "abnormal_findings": [
-            {
-                "parameter": language === 'English' ? "Hemoglobin" : "ಹೀಮೋಗ್ಲೋಬಿನ್",
-                "value": "10.2 g/dL",
-                "normal_range": "12-16 g/dL",
-                "severity": "moderate",
-                "simple_explanation": language === 'English' ? 
-                    "Slightly low. Eat iron-rich foods." : 
-                    "ಸ್ವಲ್ಪ ಕಡಿಮೆ. ಇನುಮಡ ಆಹಾರಗಳು ತಿನ್ನಿರಿ."
-            }
-        ],
-        "risk_level": "Medium",
-        "lifestyle_recommendations": language === 'English' ? [
-            "Eat green vegetables and fruits daily",
-            "Exercise for 30 minutes daily"
-        ] : [
-            "ಹಸಿರು ತರಕಾರಿಗಳು ಮತ್ತು ಹಣ್ಣುಗಳು ತಿನ್ನಿರಿ",
-            "ದಿನಕ್ಕೆ 30 ನಿಮಿಷಗಳ ವ್ಯಾಯಾಮ ಮಾಡಿರಿ"
-        ],
-        "doctor_visit_suggestion": language === 'English' ? 
-            "Consult doctor within 2 weeks" : 
-            "2 ವಾರದಲ್ಲಿ ಡಾಕ್ಟರ್ ಅನ್ನು ಭೇಟಿ ಮಾಡಿ",
-        "language": language
-    };
 }
 
 // Initialize

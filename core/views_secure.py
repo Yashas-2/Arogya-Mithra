@@ -712,35 +712,36 @@ def patient_view_report(request, report_id):
 
     if report.is_encrypted:
         logger.info(f"Attempting to decrypt report {report.id}")
+
+        # Step 1: Try decrypt_file() method
         decrypted_content = report.decrypt_file()
         if decrypted_content:
             logger.info(f"Successfully decrypted report {report.id}, content length: {len(decrypted_content)}")
             response = HttpResponse(decrypted_content, content_type='application/pdf')
             response['Content-Disposition'] = f'inline; filename="{report.title}.pdf"'
             return response
-        else:
-            # Fallback: try serving the raw file
-            logger.warning(f"Decryption failed for report {report.id}, trying raw file")
-            try:
-                import requests as req_lib
-                file_url = report.report_file.url
-                if file_url.startswith('http'):
-                    resp = req_lib.get(file_url, timeout=30)
-                    raw_content = resp.content
-                else:
-                    with open(report.report_file.path, 'rb') as f:
-                        raw_content = f.read()
-                if raw_content[:5] == b'%PDF-':
-                    logger.info(f"Raw file is valid PDF, serving unencrypted report {report.id}")
-                    response = HttpResponse(raw_content, content_type='application/pdf')
-                    response['Content-Disposition'] = f'inline; filename="{report.title}.pdf"'
-                    return response
-            except Exception as e:
-                logger.error(f"Raw file fallback also failed for report {report.id}: {e}")
-            return Response({
-                'success': False,
-                'error': 'Failed to decrypt report. The file may be corrupted or the encryption key is invalid.'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Step 2: Try reading raw file via storage backend (works with Cloudinary)
+        logger.warning(f"decrypt_file() failed for report {report.id}, trying storage backend")
+        try:
+            raw_file = report.report_file.open('rb')
+            raw_content = raw_file.read()
+            raw_file.close()
+            if raw_content[:5] == b'%PDF-':
+                logger.info(f"Raw file is valid PDF, serving unencrypted report {report.id}")
+                response = HttpResponse(raw_content, content_type='application/pdf')
+                response['Content-Disposition'] = f'inline; filename="{report.title}.pdf"'
+                return response
+            else:
+                logger.error(f"Report {report.id}: File is not a valid PDF (starts with {raw_content[:10]})")
+        except Exception as e:
+            logger.error(f"Storage backend read failed for report {report.id}: {e}")
+
+        return Response({
+            'success': False,
+            'error': 'REPORT_DECRYPTION_FAILED',
+            'message': 'The report could not be decrypted. Please contact support or re-upload the report.'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     else:
         # For non-encrypted files, use the existing approach
         serializer = MedicalReportSerializer(report)
@@ -1255,3 +1256,51 @@ def gemini_chat(request):
             'success': False,
             'error': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ============= ADMIN DIAGNOSTIC =============
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def admin_diagnostic_reports(request):
+    """Admin-only: inspect report storage health. No secrets exposed."""
+    if not request.user.is_staff:
+        return Response({'error': 'Forbidden'}, status=403)
+
+    from django.conf import settings
+    storage_backend = getattr(settings, 'DEFAULT_FILE_STORAGE', 'django.core.files.storage.FileSystemStorage')
+    reports = MedicalReport.objects.all().select_related('patient__user')
+
+    data = []
+    for r in reports:
+        file_accessible = False
+        file_size = 0
+        try:
+            f = r.report_file.open('rb')
+            content = f.read()
+            file_accessible = len(content) > 0
+            file_size = len(content)
+            f.close()
+        except Exception:
+            pass
+
+        data.append({
+            'id': r.id,
+            'title': r.title,
+            'patient': r.patient.user.username,
+            'file_field': str(r.report_file) if r.report_file else 'EMPTY',
+            'file_url': r.report_file.url if r.report_file else 'NONE',
+            'file_accessible': file_accessible,
+            'file_size': file_size,
+            'is_encrypted': r.is_encrypted,
+            'has_key': bool(r.encrypted_file_key),
+            'key_length': len(r.encrypted_file_key) if r.encrypted_file_key else 0,
+            'uploaded': r.uploaded_date.strftime('%Y-%m-%d %H:%M'),
+        })
+
+    return Response({
+        'success': True,
+        'storage_backend': storage_backend,
+        'total_reports': len(data),
+        'reports': data
+    })

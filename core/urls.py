@@ -56,6 +56,7 @@ urlpatterns = [
     path('api/admin/all-staff/', views_secure.admin_all_staff, name='admin_all_staff'),
     path('api/admin/verify-staff/<int:staff_id>/', views_secure.admin_verify_staff, name='admin_verify_staff'),
     path('api/admin/reject-staff/<int:staff_id>/', views_secure.admin_reject_staff, name='admin_reject_staff'),
+    path('api/admin/diagnostic/reports/', views_secure.admin_diagnostic_reports, name='admin_diagnostic_reports'),
     
     # Legacy/Existing APIs
     path('api/check-eligibility/', views.check_scheme_eligibility, name='api_check_eligibility'),

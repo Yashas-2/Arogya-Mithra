@@ -227,52 +227,66 @@ def analyze_medical_report(request):
                 'upgrade_required': True
             }, status=status.HTTP_403_FORBIDDEN)
         
-        # Extract text from report file
-        if not report.report_file or not os.path.exists(report.report_file.path):
-            return Response({
-                'success': False,
-                'error': 'Report file not found'
-            }, status=status.HTTP_404_NOT_FOUND)
-        
         # Decrypt and process PDF
         report_text = ''
         pdf_bytes = None
+
+        # Try decryption via model method (works with Cloudinary + local)
         try:
             decrypted = report.decrypt_file()
             if decrypted:
                 pdf_bytes = decrypted
-                reader = PyPDF2.PdfReader(io.BytesIO(decrypted))
-                text_parts = []
-                for page in reader.pages:
-                    try:
-                        text_parts.append(page.extract_text() or '')
-                    except Exception:
-                        continue
-                report_text = '\n'.join(text_parts).strip()
         except Exception as e:
             import logging
-            logging.getLogger(__name__).error(f"Text extraction failed for report {report.id}: {e}")
+            logging.getLogger(__name__).error(f"decrypt_file() failed for report {report.id}: {e}")
 
-        # If decryption failed, try raw file
+        # If decrypt failed, try reading the file directly via storage backend
         if not pdf_bytes:
             try:
-                with open(report.report_file.path, 'rb') as f:
-                    raw = f.read()
+                raw_file = report.report_file.open('rb')
+                raw = raw_file.read()
+                raw_file.close()
                 if raw[:5] == b'%PDF-':
                     pdf_bytes = raw
-                    reader = PyPDF2.PdfReader(io.BytesIO(raw))
-                    text_parts = []
-                    for page in reader.pages:
-                        try:
-                            text_parts.append(page.extract_text() or '')
-                        except Exception:
-                            continue
-                    report_text = '\n'.join(text_parts).strip()
-            except Exception:
-                pass
-        
+                else:
+                    # File is encrypted but decrypt failed — cannot proceed
+                    return Response({
+                        'success': False,
+                        'error': 'REPORT_DECRYPTION_FAILED',
+                        'message': 'The report could not be decrypted. Please contact support or re-upload the report.'
+                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"Direct file read failed for report {report.id}: {e}")
+                return Response({
+                    'success': False,
+                    'error': 'REPORT_FILE_NOT_FOUND',
+                    'message': 'The report file could not be accessed. It may have been removed during a server restart. Please re-upload the report.'
+                }, status=status.HTTP_404_NOT_FOUND)
+
+        if not pdf_bytes:
+            return Response({
+                'success': False,
+                'error': 'REPORT_FILE_EMPTY',
+                'message': 'The report file is empty or could not be read.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Extract text from PDF bytes
+        try:
+            reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
+            text_parts = []
+            for page in reader.pages:
+                try:
+                    text_parts.append(page.extract_text() or '')
+                except Exception:
+                    continue
+            report_text = '\n'.join(text_parts).strip()
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"PyPDF2 extraction failed for report {report.id}: {e}")
+
         # If PyPDF2 failed, try PyMuPDF
-        if not report_text and pdf_bytes:
+        if not report_text:
             try:
                 import fitz
                 doc = fitz.open(stream=pdf_bytes, filetype="pdf")

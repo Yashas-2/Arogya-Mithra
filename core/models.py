@@ -271,7 +271,7 @@ class MedicalReport(models.Model):
         return encrypted_content
     
     def decrypt_file(self):
-        """Decrypt file for authorized viewing — works with local and Cloudinary storage"""
+        """Decrypt file for authorized viewing — works with local, Cloudinary, and any storage backend"""
         import logging
         logger = logging.getLogger(__name__)
 
@@ -284,27 +284,12 @@ class MedicalReport(models.Model):
             return None
 
         try:
-            # Read file content — works with local files and Cloudinary
-            file_url = self.report_file.url
-            logger.info(f"Report {self.id}: File URL: {file_url}")
+            # Use storage backend's open() — works with Cloudinary, S3, local, etc.
+            raw_file = self.report_file.open('rb')
+            encrypted_content = raw_file.read()
+            raw_file.close()
+            logger.info(f"Report {self.id}: Read {len(encrypted_content)} bytes via storage backend")
 
-            if file_url.startswith('http'):
-                # Cloudinary or remote storage — download content
-                import requests
-                response = requests.get(file_url, timeout=30)
-                response.raise_for_status()
-                encrypted_content = response.content
-            else:
-                # Local file
-                file_path = self.report_file.path
-                import os
-                if not os.path.exists(file_path):
-                    logger.error(f"Report {self.id}: File does not exist at {file_path}")
-                    return None
-                with open(file_path, 'rb') as file:
-                    encrypted_content = file.read()
-
-            logger.info(f"Report {self.id}: Read {len(encrypted_content)} bytes, attempting decrypt")
             f = Fernet(self.encrypted_file_key.encode())
             decrypted = f.decrypt(encrypted_content)
             logger.info(f"Report {self.id}: Decrypted successfully, {len(decrypted)} bytes")
