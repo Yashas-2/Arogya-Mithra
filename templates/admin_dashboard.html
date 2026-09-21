@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Swasthya Sakhi</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/main.css">
+    <style>
+        :root {
+            --primary-dark: #0a0e27;
+            --secondary-dark: #1a1f3a;
+            --accent-emerald: #10b981;
+            --accent-red: #ef4444;
+        }
+        body { background: var(--primary-dark); color: #e2e8f0; font-family: 'Inter', sans-serif; min-height: 100vh; }
+        .admin-container { max-width: 1000px; margin: 0 auto; padding: 2rem 1rem; }
+        .admin-header { text-align: center; margin-bottom: 2rem; }
+        .admin-header h1 { font-family: 'Montserrat', sans-serif; font-size: 2rem; color: var(--accent-emerald); }
+        .admin-header p { color: rgba(255,255,255,0.6); margin-top: 0.5rem; }
+        .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+        .stat-card { background: var(--secondary-dark); border-radius: 12px; padding: 1.5rem; text-align: center; border: 1px solid rgba(255,255,255,0.05); }
+        .stat-card .number { font-size: 2.5rem; font-weight: 800; font-family: 'Montserrat', sans-serif; }
+        .stat-card .label { color: rgba(255,255,255,0.5); font-size: 0.85rem; margin-top: 0.25rem; }
+        .stat-card.pending .number { color: #f59e0b; }
+        .stat-card.verified .number { color: var(--accent-emerald); }
+        .stat-card.total .number { color: #60a5fa; }
+        .section-title { font-family: 'Montserrat', sans-serif; font-size: 1.3rem; margin-bottom: 1rem; color: #fff; }
+        .staff-table { width: 100%; border-collapse: collapse; background: var(--secondary-dark); border-radius: 12px; overflow: hidden; margin-bottom: 2rem; }
+        .staff-table th { background: rgba(255,255,255,0.05); padding: 0.75rem 1rem; text-align: left; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(255,255,255,0.5); }
+        .staff-table td { padding: 0.75rem 1rem; border-top: 1px solid rgba(255,255,255,0.05); }
+        .badge { padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+        .badge-pending { background: rgba(245,158,11,0.15); color: #f59e0b; }
+        .badge-verified { background: rgba(16,185,129,0.15); color: #10b981; }
+        .btn { padding: 0.5rem 1rem; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.85rem; transition: all 0.2s; }
+        .btn-verify { background: var(--accent-emerald); color: #fff; }
+        .btn-verify:hover { background: #059669; }
+        .btn-reject { background: var(--accent-red); color: #fff; }
+        .btn-reject:hover { background: #dc2626; }
+        .btn-group { display: flex; gap: 0.5rem; }
+        .empty-msg { text-align: center; padding: 3rem; color: rgba(255,255,255,0.3); }
+        .nav-links { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+        .nav-links a { color: var(--accent-emerald); text-decoration: none; }
+        .nav-links a:hover { text-decoration: underline; }
+        .back-btn { display: inline-flex; align-items: center; gap: 0.5rem; color: rgba(255,255,255,0.5); text-decoration: none; margin-bottom: 1rem; }
+        .back-btn:hover { color: var(--accent-emerald); }
+        .tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
+        .tab { padding: 0.5rem 1.25rem; border-radius: 8px; cursor: pointer; background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.5); border: none; font-weight: 600; font-size: 0.85rem; transition: all 0.2s; }
+        .tab.active { background: var(--accent-emerald); color: #fff; }
+        .toast { position: fixed; bottom: 2rem; right: 2rem; background: var(--accent-emerald); color: #fff; padding: 1rem 1.5rem; border-radius: 8px; font-weight: 600; display: none; z-index: 9999; }
+        .toast.error { background: var(--accent-red); }
+    </style>
+</head>
+<body>
+    <div class="admin-container">
+        <a href="/" class="back-btn"><i class="fas fa-arrow-left"></i> Back to Home</a>
+
+        <div class="admin-header">
+            <h1><i class="fas fa-shield-alt"></i> Admin Dashboard</h1>
+            <p>Manage hospital staff verification</p>
+        </div>
+
+        <div class="stats-row">
+            <div class="stat-card pending">
+                <div class="number" id="pendingCount">0</div>
+                <div class="label">Pending Verification</div>
+            </div>
+            <div class="stat-card verified">
+                <div class="number" id="verifiedCount">0</div>
+                <div class="label">Verified Staff</div>
+            </div>
+            <div class="stat-card total">
+                <div class="number" id="totalCount">0</div>
+                <div class="label">Total Staff</div>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('pending')">Pending</button>
+            <button class="tab" onclick="showTab('all')">All Staff</button>
+        </div>
+
+        <div id="pendingSection">
+            <table class="staff-table">
+                <thead>
+                    <tr>
+                        <th>Staff Name</th>
+                        <th>Username</th>
+                        <th>Hospital</th>
+                        <th>License</th>
+                        <th>Registered</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="pendingBody">
+                    <tr><td colspan="6" class="empty-msg">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="allSection" style="display:none;">
+            <table class="staff-table">
+                <thead>
+                    <tr>
+                        <th>Staff Name</th>
+                        <th>Username</th>
+                        <th>Hospital</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="allBody">
+                    <tr><td colspan="4" class="empty-msg">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const authToken = localStorage.getItem('authToken');
+        const userRole = localStorage.getItem('userRole');
+        if (!authToken || userRole !== 'ADMIN') {
+            window.location.href = '/login/';
+        }
+
+        function showToast(msg, isError) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = 'toast' + (isError ? ' error' : '');
+            t.style.display = 'block';
+            setTimeout(() => t.style.display = 'none', 3000);
+        }
+
+        function showTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            if (tab === 'pending') {
+                event.target.classList.add('active');
+                document.getElementById('pendingSection').style.display = 'block';
+                document.getElementById('allSection').style.display = 'none';
+                loadPending();
+            } else {
+                event.target.classList.add('active');
+                document.getElementById('pendingSection').style.display = 'none';
+                document.getElementById('allSection').style.display = 'block';
+                loadAll();
+            }
+        }
+
+        async function loadPending() {
+            const res = await fetch('/api/admin/pending-staff/', {
+                headers: { 'Authorization': 'Bearer ' + authToken }
+            });
+            const data = await res.json();
+            document.getElementById('pendingCount').textContent = data.data.length;
+            if (data.data.length === 0) {
+                document.getElementById('pendingBody').innerHTML = '<tr><td colspan="6" class="empty-msg"><i class="fas fa-check-circle" style="color: var(--accent-emerald); font-size: 1.5rem;"></i><br><br>No pending staff to verify</td></tr>';
+                return;
+            }
+            document.getElementById('pendingBody').innerHTML = data.data.map(s => `
+                <tr>
+                    <td>${s.staff_name}</td>
+                    <td>${s.username}</td>
+                    <td>${s.hospital_name}</td>
+                    <td>${s.license_number}</td>
+                    <td>${s.created_at}</td>
+                    <td>
+                        <div class="btn-group">
+                            <button class="btn btn-verify" onclick="verifyStaff(${s.id})"><i class="fas fa-check"></i> Verify</button>
+                            <button class="btn btn-reject" onclick="rejectStaff(${s.id})"><i class="fas fa-times"></i> Reject</button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function loadAll() {
+            const res = await fetch('/api/admin/all-staff/', {
+                headers: { 'Authorization': 'Bearer ' + authToken }
+            });
+            const data = await res.json();
+            document.getElementById('verifiedCount').textContent = data.data.filter(s => s.is_verified).length;
+            document.getElementById('totalCount').textContent = data.data.length;
+            document.getElementById('allBody').innerHTML = data.data.map(s => `
+                <tr>
+                    <td>${s.staff_name}</td>
+                    <td>${s.username}</td>
+                    <td>${s.hospital_name}</td>
+                    <td><span class="badge ${s.is_verified ? 'badge-verified' : 'badge-pending'}">${s.is_verified ? 'Verified' : 'Pending'}</span></td>
+                </tr>
+            `).join('');
+        }
+
+        async function verifyStaff(id) {
+            const res = await fetch('/api/admin/verify-staff/' + id + '/', {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + authToken }
+            });
+            const data = await res.json();
+            showToast(data.message);
+            loadPending();
+            loadAll();
+        }
+
+        async function rejectStaff(id) {
+            if (!confirm('Are you sure you want to reject this staff?')) return;
+            const res = await fetch('/api/admin/reject-staff/' + id + '/', {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + authToken }
+            });
+            const data = await res.json();
+            showToast(data.message);
+            loadPending();
+            loadAll();
+        }
+
+        loadPending();
+        loadAll();
+    </script>
+</body>
+</html>

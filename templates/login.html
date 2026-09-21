@@ -553,6 +553,10 @@
                     <i class="fas fa-hospital"></i>
                     <span data-translate="hospitalStaff">Hospital Staff</span>
                 </button>
+                <button class="role-btn" data-role="admin">
+                    <i class="fas fa-shield-alt"></i>
+                    <span>Admin</span>
+                </button>
             </div>
 
             <div class="alert error" id="errorAlert"></div>
@@ -604,7 +608,8 @@
 
         const descriptions = {
             patient: 'Access your health reports and AI analysis',
-            hospital: 'Upload and manage patient reports'
+            hospital: 'Upload and manage patient reports',
+            admin: 'Manage and verify hospital staff'
         };
 
         // Role switcher
@@ -624,9 +629,12 @@
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
             
-            const endpoint = currentRole === 'patient' 
-                ? '/api/auth/patient-login/'
-                : '/api/auth/hospital-login/';
+            const endpoints = {
+                patient: '/api/auth/patient-login/',
+                hospital: '/api/auth/hospital-login/',
+                admin: '/api/auth/admin-login/'
+            };
+            const endpoint = endpoints[currentRole];
             
             try {
                 const response = await fetch(endpoint, {
@@ -657,6 +665,8 @@
                     // Redirect based on role
                     if (data.role === 'PATIENT') {
                         window.location.href = '/report-vault/';
+                    } else if (data.role === 'ADMIN') {
+                        window.location.href = '/admin-dashboard/';
                     } else {
                         window.location.href = '/hospital-dashboard/';
                     }

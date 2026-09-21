@@ -61,6 +61,10 @@ def premium_view(request):
     """Premium subscription page"""
     return render(request, 'premium.html')
 
+def admin_dashboard_view(request):
+    """Admin dashboard to manage hospital staff"""
+    return render(request, 'admin_dashboard.html')
+
 def login_view(request):
     """Dual role login page"""
     return render(request, 'login.html')

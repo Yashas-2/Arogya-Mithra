@@ -146,7 +146,7 @@ def register_hospital_staff(request):
             department=request.data.get('department', ''),
             license_number=request.data['license_number'],
             profile_photo=request.FILES.get('profile_photo'),
-            is_verified=False  # Admin verification required
+            is_verified=False  # Admin must verify
         )
         
         return Response({
@@ -191,6 +191,98 @@ def patient_login(request):
         'success': False,
         'error': 'Invalid credentials or not a registered patient'
     }, status=status.HTTP_401_UNAUTHORIZED)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def admin_login(request):
+    """Admin login endpoint"""
+    username = request.data.get('username')
+    password = request.data.get('password')
+
+    user = authenticate(username=username, password=password)
+
+    if user and user.is_staff:
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'success': True,
+            'role': 'ADMIN',
+            'token': str(refresh.access_token),
+            'refresh': str(refresh),
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'name': user.get_full_name() or user.username
+            }
+        })
+
+    return Response({
+        'success': False,
+        'error': 'Invalid credentials or not an admin'
+    }, status=status.HTTP_401_UNAUTHORIZED)
+
+
+@api_view(['GET'])
+def admin_pending_staff(request):
+    """List all unverified hospital staff"""
+    if not request.user.is_staff:
+        return Response({'error': 'Forbidden'}, status=403)
+    staff = HospitalStaff.objects.filter(is_verified=False).select_related('user')
+    data = [{
+        'id': s.id,
+        'username': s.user.username,
+        'staff_name': s.staff_name,
+        'hospital_name': s.hospital_name,
+        'license_number': s.license_number,
+        'created_at': s.created_at.strftime('%Y-%m-%d %H:%M'),
+    } for s in staff]
+    return Response({'success': True, 'data': data})
+
+
+@api_view(['GET'])
+def admin_all_staff(request):
+    """List all hospital staff"""
+    if not request.user.is_staff:
+        return Response({'error': 'Forbidden'}, status=403)
+    staff = HospitalStaff.objects.select_related('user').all()
+    data = [{
+        'id': s.id,
+        'username': s.user.username,
+        'staff_name': s.staff_name,
+        'hospital_name': s.hospital_name,
+        'license_number': s.license_number,
+        'is_verified': s.is_verified,
+        'created_at': s.created_at.strftime('%Y-%m-%d %H:%M'),
+    } for s in staff]
+    return Response({'success': True, 'data': data})
+
+
+@api_view(['POST'])
+def admin_verify_staff(request, staff_id):
+    """Verify a hospital staff"""
+    if not request.user.is_staff:
+        return Response({'error': 'Forbidden'}, status=403)
+    try:
+        staff = HospitalStaff.objects.get(id=staff_id)
+        staff.is_verified = True
+        staff.save()
+        return Response({'success': True, 'message': f'{staff.staff_name} verified'})
+    except HospitalStaff.DoesNotExist:
+        return Response({'error': 'Staff not found'}, status=404)
+
+
+@api_view(['POST'])
+def admin_reject_staff(request, staff_id):
+    """Reject and delete a hospital staff"""
+    if not request.user.is_staff:
+        return Response({'error': 'Forbidden'}, status=403)
+    try:
+        staff = HospitalStaff.objects.get(id=staff_id)
+        name = staff.staff_name
+        staff.user.delete()
+        return Response({'success': True, 'message': f'{name} rejected and removed'})
+    except HospitalStaff.DoesNotExist:
+        return Response({'error': 'Staff not found'}, status=404)
 
 
 @api_view(['POST'])

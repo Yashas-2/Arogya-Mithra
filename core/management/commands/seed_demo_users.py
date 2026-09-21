@@ -7,6 +7,13 @@ class Command(BaseCommand):
     help = 'Seed demo users for production'
 
     def handle(self, *args, **options):
+        # Admin
+        if not User.objects.filter(username='admin').exists():
+            u = User.objects.create_superuser('admin', 'admin@gmail.com', 'admin123')
+            self.stdout.write(self.style.SUCCESS('Created admin: admin / admin123'))
+        else:
+            self.stdout.write('Admin already exists')
+
         # Patient - ravi
         user, created = User.objects.get_or_create(
             username='ravi',

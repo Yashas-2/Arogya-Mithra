@@ -11,10 +11,12 @@ urlpatterns = [
     path('report-vault/', views.report_vault_view, name='report_vault'),
     path('report-analysis/', views.report_analysis_view, name='report_analysis'),
     path('premium/', views.premium_view, name='premium'),
+    path('admin-dashboard/', views.admin_dashboard_view, name='admin_dashboard'),
     
     # Authentication APIs
     path('api/auth/patient-login/', views_secure.patient_login, name='patient_login'),
     path('api/auth/hospital-login/', views_secure.hospital_staff_login, name='hospital_login'),
+    path('api/auth/admin-login/', views_secure.admin_login, name='admin_login'),
     path('api/auth/doctor-login/', views_secure.doctor_login, name='doctor_login'),
     path('api/auth/register-patient/', views_secure.register_patient, name='register_patient'),
     path('api/auth/register-hospital/', views_secure.register_hospital_staff, name='register_hospital'),
@@ -48,6 +50,12 @@ urlpatterns = [
     path('api/patient/reports/', views_secure.patient_get_reports, name='patient_reports'),
     path('api/patient/report/<int:report_id>/', views_secure.patient_view_report, name='patient_view_report'),
     path('api/patient/access-logs/', views_secure.patient_access_logs, name='patient_access_logs'),
+
+    # Admin APIs
+    path('api/admin/pending-staff/', views_secure.admin_pending_staff, name='admin_pending_staff'),
+    path('api/admin/all-staff/', views_secure.admin_all_staff, name='admin_all_staff'),
+    path('api/admin/verify-staff/<int:staff_id>/', views_secure.admin_verify_staff, name='admin_verify_staff'),
+    path('api/admin/reject-staff/<int:staff_id>/', views_secure.admin_reject_staff, name='admin_reject_staff'),
     
     # Legacy/Existing APIs
     path('api/check-eligibility/', views.check_scheme_eligibility, name='api_check_eligibility'),
