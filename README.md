@@ -1,8 +1,8 @@
-# 🏥 ArogyaMitra AI
+# 🏥 Swasthya Sakhi
 
 **Intelligent Healthcare Assistance for Karnataka Government Hospitals.**
 
-ArogyaMitra AI is a smart healthcare platform designed to empower patients by bridging the gap between medical services and patient understanding. Powered by **Gemini AI**, it helps users identify government scheme eligibility, securely store hospital reports, and understand complex medical terms in simple language.
+Swasthya Sakhi is a smart healthcare platform designed to empower patients by bridging the gap between medical services and patient understanding. Powered by **Gemini AI**, it helps users identify government scheme eligibility, securely store hospital reports, and understand complex medical terms in simple language.
 
 ---
 

@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}AI Report Analysis - ArogyaMitra AI{% endblock %}
+{% block title %}AI Report Analysis - Swasthya Sakhi{% endblock %}
 
 {% block content %}
 <section style="min-height: 100vh; padding: 8rem 2rem 4rem; background: var(--gradient-dark);">
@@ -158,7 +158,11 @@ let selectedReportId = null;
 // Load reports on page load
 async function loadReports() {
     try {
-        const response = await fetch('/api/reports/');
+        const authToken = localStorage.getItem('authToken');
+        const headers = { 'Content-Type': 'application/json' };
+        if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
+
+        const response = await fetch('/api/patient/reports/', { headers });
         const result = await response.json();
         
         if (result.success && result.data.length > 0) {
@@ -174,7 +178,7 @@ async function loadReports() {
             document.getElementById('reportsList').innerHTML = `
                 <div style="text-align: center; padding: 2rem;">
                     <i class="fas fa-inbox" style="font-size: 3rem; color: var(--gray-300); margin-bottom: 1rem;"></i>
-                    <p style="color: var(--gray-300);">No reports uploaded yet. <a href="/report-vault/" style="color: var(--primary-emerald);">Upload reports</a> first.</p>
+                    <p style="color: var(--gray-300);">No reports uploaded yet. Reports from hospital staff will appear here.</p>
                 </div>
             `;
         }
@@ -228,11 +232,13 @@ document.getElementById('analyzeBtn').addEventListener('click', async function()
     document.getElementById('loadingAnalysis').style.display = 'block';
     
     try {
+        const authToken = localStorage.getItem('authToken');
+        const headers = { 'Content-Type': 'application/json' };
+        if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
+
         const response = await fetch('/api/analyze-report/', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: headers,
             body: JSON.stringify({
                 report_id: selectedReportId,
                 language: language

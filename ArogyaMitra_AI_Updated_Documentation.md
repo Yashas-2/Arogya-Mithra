@@ -1,10 +1,10 @@
-# ArogyaMitra AI — Intelligent Healthcare Assistance for Karnataka Government Hospitals
+# Swasthya Sakhi — Intelligent Healthcare Assistance for Karnataka Government Hospitals
 
 ## 1. Introduction
 
 Healthcare accessibility in India, particularly within public/government hospitals, has significantly improved over the years. However, awareness, navigation and comprehension of available medical benefits remain a challenge for patients — especially those belonging to rural, low-income or non-technical backgrounds.
 
-ArogyaMitra AI is a Smart Healthcare Platform designed to empower patients in Karnataka Government Hospitals by bridging the gap between available medical services and patient understanding. Powered by Gemini AI, it helps users identify government scheme eligibility, digitally store their hospital reports, and understand medical terms in simple Kannada and English.
+Swasthya Sakhi is a Smart Healthcare Platform designed to empower patients in Karnataka Government Hospitals by bridging the gap between available medical services and patient understanding. Powered by Gemini AI, it helps users identify government scheme eligibility, digitally store their hospital reports, and understand medical terms in simple Kannada and English.
 
 ## 2. Problem Statement
 
@@ -21,9 +21,9 @@ Additionally, patients are often forced to physically move across hospital depar
 | Medical terms difficult to understand | Leads to stress + delayed treatment decisions |
 | Rural & non-digital citizens face more issues | Information doesn't reach beneficiaries properly |
 
-## 3. Proposed Solution — ArogyaMitra AI
+## 3. Proposed Solution — Swasthya Sakhi
 
-ArogyaMitra AI is a One-Click Healthcare Intelligence Platform that solves these problems using:
+Swasthya Sakhi is a One-Click Healthcare Intelligence Platform that solves these problems using:
 
 🔹 AI-driven Scheme Eligibility Predictor
 🔹 Digital Medical Report Locker
@@ -89,7 +89,7 @@ Django Backend + REST API      PostgreSQL / SQLite
 
 ## 7. Security & Privacy Features
 
-ArogyaMitra AI implements enterprise-grade security measures:
+Swasthya Sakhi implements enterprise-grade security measures:
 
 🔒 **End-to-End Encryption**: All medical reports are encrypted before storage
 🔒 **OTP Protection**: Two-factor authentication for accessing sensitive reports
@@ -165,7 +165,7 @@ This makes it not just a project, but a scalable health-tech product.
 
 ## 12. Conclusion
 
-ArogyaMitra AI bridges one of the most critical healthcare gaps — information accessibility.
+Swasthya Sakhi bridges one of the most critical healthcare gaps — information accessibility.
 
 By simplifying scheme eligibility, centralizing medical reports, and using AI to translate medical jargon into human-friendly language, this system improves treatment clarity, reduces physical effort, and empowers millions of government hospital patients.
 

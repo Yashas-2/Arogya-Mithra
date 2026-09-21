@@ -1,4 +1,4 @@
-# 🚀 Quick Start - ArogyaMitra AI
+# 🚀 Quick Start - Swasthya Sakhi
 
 ## ✅ All Tasks Completed!
 

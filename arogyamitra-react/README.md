@@ -1,6 +1,6 @@
-# ArogyaMitra AI - React Version
+# Swasthya Sakhi - React Version
 
-This is a React.js implementation of the ArogyaMitra AI healthcare platform, originally built with Django. This React version maintains all the functionality and design of the original while leveraging modern frontend technologies.
+This is a React.js implementation of the Swasthya Sakhi healthcare platform, originally built with Django. This React version maintains all the functionality and design of the original while leveraging modern frontend technologies.
 
 ## Features
 

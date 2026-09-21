@@ -286,10 +286,6 @@ p {
     padding: 0.5rem 2rem;
 }
 
-.navbar.hidden {
-    transform: translateY(-100%);
-}
-
 
 
 /* Navbar Language Toggle */
@@ -407,6 +403,7 @@ p {
 }
 
 .hero-title {
+    font-size: clamp(1.75rem, 3.5vw, 2.75rem);
     margin-bottom: 1.5rem;
     animation: fade-in-up 0.8s ease-out 0.2s backwards;
 }
@@ -419,7 +416,7 @@ p {
 }
 
 .hero-subtitle {
-    font-size: 1.25rem;
+    font-size: 1.1rem;
     color: var(--gray-300);
     max-width: 700px;
     margin: 0 auto 3rem;
@@ -642,7 +639,7 @@ p {
     }
     
     h1 {
-        font-size: 2.5rem;
+        font-size: 1.75rem;
     }
     
     .hero-buttons {

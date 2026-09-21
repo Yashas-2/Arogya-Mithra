@@ -69,7 +69,7 @@ def send_otp_sms(phone_number: str, otp: str) -> bool:
     try:
         client  = Client(sid, token)
         message = client.messages.create(
-            body=f"Your ArogyaMitra OTP is: {otp}\nValid for 5 minutes. Do not share this code.",
+            body=f"Your Swasthya Sakhi OTP is: {otp}\nValid for 5 minutes. Do not share this code.",
             from_=from_,
             to=to,
         )

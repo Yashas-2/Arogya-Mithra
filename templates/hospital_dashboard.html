@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="ArogyaMitra AI - Government Hospital Healthcare Intelligence for Karnataka">
-    <title>Hospital Dashboard - ArogyaMitra AI</title>
+    <meta name="description" content="Swasthya Sakhi - Hospital Staff Dashboard">
+    <title>Hospital Dashboard - Swasthya Sakhi</title>
     
     <!-- CSRF Token -->
     {% if csrf_token %}
@@ -462,11 +462,13 @@
             console.log('CSRF Token:', csrftoken);
             
             try {
+                const authToken = localStorage.getItem('authToken');
+                const headers = { 'X-CSRFToken': csrftoken };
+                if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
+
                 const response = await fetch('/api/hospital/upload-report/', {
                     method: 'POST',
-                    headers: {
-                        'X-CSRFToken': csrftoken
-                    },
+                    headers: headers,
                     body: formData
                 });
                 
@@ -525,7 +527,11 @@
         // Load upload history
         async function loadHistory() {
             try {
-                const response = await fetch('/api/hospital/upload-history/');
+                const authToken = localStorage.getItem('authToken');
+                const headers = { 'Content-Type': 'application/json' };
+                if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
+
+                const response = await fetch('/api/hospital/upload-history/', { headers });
                 const data = await response.json();
                 
                 if (data.success) {

@@ -1,14 +1,14 @@
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from django.conf import settings
 import json
 
-# Configure Gemini AI
-genai.configure(api_key=settings.GEMINI_API_KEY)
+# Initialize client with new SDK
+client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
 class GeminiAIService:
     def __init__(self):
-        # Use gemini-2.5-flash as per user environment access
-        self.model = genai.GenerativeModel('gemini-2.5-flash')
+        self.model = 'gemini-3.5-flash-lite'
 
     def check_scheme_eligibility(self, patient_data):
         """
@@ -30,19 +30,19 @@ Patient Details:
 Based on this information, identify the MOST SUITABLE health scheme from Karnataka or Central Government.
 
 Consider these major schemes:
-1. **Pradhan Mantri Jan Arogya Yojana (PMJAY)** - Central, for BPL families, covers ₹5 lakhs/year
-2. **Vajpayee Arogyashree** - Karnataka, for BPL families, covers critical illnesses
-3. **Suvarna Arogya Suraksha** - Karnataka, for APL families (₹1-2 lakhs income)
-4. **Jyothi Sanjeevini Yojana** - Karnataka, for women and children
-5. **Yashasvini Health Scheme** - Karnataka, for cooperative members
-6. **Karnataka Arogya Raksha Scheme (KARS)** - Karnataka state employees
-7. **Ayushman Bharat** - Central, cashless treatment for poor families
+1. Pradhan Mantri Jan Arogya Yojana (PMJAY) - Central, for BPL families, covers 5 lakhs/year
+2. Vajpayee Arogyashree - Karnataka, for BPL families, covers critical illnesses
+3. Suvarna Arogya Suraksha - Karnataka, for APL families
+4. Jyothi Sanjeevini Yojana - Karnataka, for women and children
+5. Yashasvini Health Scheme - Karnataka, for cooperative members
+6. Karnataka Arogya Raksha Scheme (KARS) - Karnataka state employees
+7. Ayushman Bharat - Central, cashless treatment for poor families
 
 YOU MUST RETURN VALID JSON in this EXACT structure:
 {{
   "scheme_name": "Name of the most suitable scheme",
-  "scheme_type": "Karnataka" or "Central",
-  "eligibility_score": "XX%" (your confidence in eligibility),
+  "scheme_type": "Karnataka or Central",
+  "eligibility_score": "XX% (your confidence in eligibility)",
   "why_eligible": "Clear explanation why patient qualifies",
   "required_documents": ["Document 1", "Document 2", "Document 3"],
   "apply_steps": [
@@ -57,13 +57,11 @@ YOU MUST RETURN VALID JSON in this EXACT structure:
 CRITICAL: Return ONLY the JSON object, no extra text before or after.
 """
 
-        # Use strict generation config for JSON
         try:
-            import google.generativeai as genai
-            response = self.model.generate_content(
-                prompt,
-                generation_config=genai.types.GenerationConfig(
-                    candidate_count=1,
+            response = client.models.generate_content(
+                model=self.model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
                     max_output_tokens=1500,
                     temperature=0.2,
                     top_p=0.8,
@@ -71,8 +69,8 @@ CRITICAL: Return ONLY the JSON object, no extra text before or after.
                     response_mime_type="application/json"
                 )
             )
-            result_text = response.text.strip()
-            
+            result_text = response.text.strip() if response.text else ""
+
             # Clean response
             if result_text.startswith('```json'):
                 result_text = result_text[7:]
@@ -82,18 +80,19 @@ CRITICAL: Return ONLY the JSON object, no extra text before or after.
                 result_text = result_text[:-3]
             result_text = result_text.strip()
             print(f"DEBUG - Full AI Response: {result_text}")
-            
-            # Parse JSON
+
+            if not result_text:
+                raise Exception("Empty response from AI")
+
             result = json.loads(result_text)
-            
-            # Additional validation
+
             required_keys = ['scheme_name', 'scheme_type', 'eligibility_score', 'why_eligible', 'required_documents', 'apply_steps']
             for key in required_keys:
                 if key not in result:
                     raise ValueError(f"Missing required key from AI response: {key}")
-                    
+
             return result
-            
+
         except json.JSONDecodeError:
             print(f"Failed to parse Gemini JSON output for scheme prediction: {result_text}")
             raise Exception("AI generated an invalid response. Please try again.")
@@ -105,11 +104,9 @@ CRITICAL: Return ONLY the JSON object, no extra text before or after.
         """
         Analyze medical report using Gemini AI
         Returns structured JSON with findings
-        OPTIMIZED: Further optimized for 5-second processing
         """
-        # Increased limit for better accuracy - Flash can handle 4K+ chars quickly
         truncated_text = report_text[:4000] + "..." if len(report_text) > 4000 else report_text
-        
+
         prompt = f"""
 You are a highly qualified medical AI assistant. Analyze the following medical report and respond ONLY with a valid JSON object. Do not include any markdown formatting, conversational text, or explanations outside the JSON structure.
 
@@ -126,11 +123,11 @@ REQUIRED JSON STRUCTURE:
       "parameter": "Name of the test/parameter that is abnormal",
       "value": "The recorded value",
       "normal_range": "The expected normal range",
-      "severity": "mild", "moderate", "severe", or "critical",
+      "severity": "mild, moderate, severe, or critical",
       "simple_explanation": "A simple explanation of what this abnormality means (in {language})"
     }}
   ],
-  "risk_level": "Low", "Medium", or "High",
+  "risk_level": "Low, Medium, or High",
   "lifestyle_recommendations": [
     "Specific lifestyle or dietary recommendation (in {language})"
   ],
@@ -141,22 +138,19 @@ CRITICAL INSTRUCTION: Return ONLY the raw JSON object. Do not use ```json blocks
 """
 
         try:
-            # Add generation config optimized for accuracy and JSON structure
-            import google.generativeai as genai
-            response = self.model.generate_content(
-                prompt,
-                generation_config=genai.types.GenerationConfig(
-                    candidate_count=1,
+            response = client.models.generate_content(
+                model=self.model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
                     max_output_tokens=2048,
-                    temperature=0.2, 
+                    temperature=0.2,
                     top_p=0.8,
                     top_k=40,
                     response_mime_type="application/json"
                 )
             )
-            result_text = response.text.strip()
-            
-            # Clean response if the AI still included markdown blocks
+            result_text = response.text.strip() if response.text else ""
+
             if result_text.startswith('```json'):
                 result_text = result_text[7:]
             if result_text.startswith('```'):
@@ -164,18 +158,19 @@ CRITICAL INSTRUCTION: Return ONLY the raw JSON object. Do not use ```json blocks
             if result_text.endswith('```'):
                 result_text = result_text[:-3]
             result_text = result_text.strip()
-            
-            # Parse JSON
+
+            if not result_text:
+                raise Exception("Empty response from AI")
+
             result = json.loads(result_text)
-            
-            # Basic validation to ensure structure is correct
+
             required_keys = ['patient_summary', 'abnormal_findings', 'risk_level', 'lifestyle_recommendations', 'doctor_visit_suggestion']
             for key in required_keys:
                 if key not in result:
                     raise ValueError(f"Missing required key in Gemini response: {key}")
-                    
+
             return result
-            
+
         except json.JSONDecodeError as e:
             print(f"Failed to parse Gemini JSON output: {result_text}")
             raise Exception("The AI generated an invalid response format. Please try again.")
@@ -189,12 +184,12 @@ CRITICAL INSTRUCTION: Return ONLY the raw JSON object. Do not use ```json blocks
         """
         if not doctors:
             return None
-            
+
         doctor_list_str = "\n".join([
-            f"ID: {d.get('id')} | Name: {d.get('full_name')} | Specialty: {d.get('specialization')} | Exp: {d.get('experience_years')} yrs" 
+            f"ID: {d.get('id')} | Name: {d.get('full_name')} | Specialty: {d.get('specialization')} | Exp: {d.get('experience_years')} yrs"
             for d in doctors
         ])
-        
+
         prompt = f"""
 You are a medical triage expert. Based on the following AI analysis of a patient's medical report, recommend the MOST appropriate doctor from the provided list.
 
@@ -207,25 +202,23 @@ AVAILABLE DOCTORS:
 Return ONLY a JSON object with the recommended doctor ID and a brief reason.
 Example: {{"recommended_doctor_id": 123, "reason": "Appropriate specialty for findings"}}
 
-{{"recommended_doctor_id": 
+{{"recommended_doctor_id":
 """
         try:
-            # Using flash for high-speed recommendation
-            response = self.model.generate_content(
-                prompt,
-                generation_config=genai.types.GenerationConfig(
+            response = client.models.generate_content(
+                model=self.model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
                     max_output_tokens=100,
                     temperature=0.1
                 )
             )
-            text = response.text.strip()
-            # Handle potential JSON prefixing from the prompt hack
+            text = response.text.strip() if response.text else ""
             if not text.startswith('{'):
                 text = '{"recommended_doctor_id": ' + text
-            
-            # Basic cleanup
-            if '}' not in text: text += '}'
-            
+            if '}' not in text:
+                text += '}'
+
             result = json.loads(text)
             return result.get('recommended_doctor_id')
         except Exception as e:
@@ -240,10 +233,9 @@ Example: {{"recommended_doctor_id": 123, "reason": "Appropriate specialty for fi
         system_prompt = "You are a helpful medical assistant. Provide accurate, empathetic, and professional health advice."
         if doctor_context:
             system_prompt += f" You are currently representing Dr. {doctor_context.get('full_name')} who is a {doctor_context.get('specialization')}. Keep your advice within this specialization but remain general if needed."
-        
-        # Format chat history for Gemini
+
         history_str = ""
-        for msg in chat_history[-6:]: # Keep last 6 messages
+        for msg in chat_history[-6:]:
             role = "Patient" if msg.get('from') == 'patient' else "Assistant"
             history_str += f"{role}: {msg.get('text')}\n"
 
@@ -261,17 +253,18 @@ Rules:
 4. Response should be plain text.
 """
         try:
-            print(f"DEBUG GEMINI SERVICE: sending prompt to {self.model.model_name}")
-            response = self.model.generate_content(
-                prompt,
-                generation_config=genai.types.GenerationConfig(
+            response = client.models.generate_content(
+                model=self.model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
                     max_output_tokens=500,
                     temperature=0.7,
                     top_p=0.9
                 )
             )
-            print("DEBUG GEMINI SERVICE: received response")
-            return response.text.strip()
+            if response.text:
+                return response.text.strip()
+            return "I apologize, but I'm having trouble generating a response. Please try again."
         except Exception as e:
             print(f"DEBUG GEMINI SERVICE ERROR: {str(e)}")
             import traceback

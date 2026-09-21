@@ -906,15 +906,6 @@ window.addEventListener('scroll', () => {
         navbar.classList.remove('scrolled');
     }
     
-    // Hide navbar when scrolling down, show when scrolling up
-    if (currentScroll > lastScroll && currentScroll > 100) {
-        // Scrolling down
-        navbar.classList.add('hidden');
-    } else if (lastScroll - currentScroll > 50) {
-        // Scrolling up significantly
-        navbar.classList.remove('hidden');
-    }
-    
     lastScroll = currentScroll;
 });
 

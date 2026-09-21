@@ -6,6 +6,9 @@ __pycache__/
 db.sqlite3
 *.log
 
+# Media uploads
+media/
+
 # Environment secrets — NEVER commit these
 .env
 .env.*

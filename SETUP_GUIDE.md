@@ -1,4 +1,4 @@
-# 🏥 ArogyaMitra AI - Complete Setup Guide
+# 🏥 Swasthya Sakhi - Complete Setup Guide
 
 ## 🎉 Project Successfully Created!
 
