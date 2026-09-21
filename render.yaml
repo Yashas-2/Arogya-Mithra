@@ -2,7 +2,7 @@ services:
   - type: web
     name: swasthya-sakhi
     runtime: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
     startCommand: gunicorn arogyamitra.wsgi:application
     envVars:
       - key: SECRET_KEY
