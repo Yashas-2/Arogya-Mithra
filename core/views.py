@@ -275,14 +275,15 @@ def analyze_medical_report(request):
         # Preprocess text to optimize for AI analysis speed
         processed_text = preprocess_medical_text(report_text)
         
-        # Process with Gemini AI 
+        # Process with Gemini AI, fallback to rule-based if it fails
         try:
             analysis_result = gemini_service.analyze_medical_report(processed_text, language)
+            source = 'AI'
         except Exception as e:
-            return Response({
-                'success': False,
-                'error': f'AI Analysis failed: {str(e)}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            import logging
+            logging.getLogger(__name__).warning(f"Gemini AI failed for report {report.id}, using fallback: {e}")
+            analysis_result = generate_fallback_analysis(processed_text, language)
+            source = 'rule-based'
         
         # Save analysis
         ai_analysis, created = AIAnalysis.objects.update_or_create(
@@ -311,7 +312,8 @@ def analyze_medical_report(request):
         return Response({
             'success': True,
             'data': analysis_serializer.data,
-            'cached': False
+            'cached': False,
+            'source': source
         }, status=status.HTTP_200_OK)
     
     except Exception as e:
@@ -417,5 +419,151 @@ def preprocess_medical_text(text, max_chars=4000):
     text = text.strip()
     # Truncate to max_chars to avoid exceeding Gemini's context window
     if len(text) > max_chars:
-        text = text[:max_chars] + '\n... [truncated]'
+        text = text[:max_chars]
     return text
+
+
+def generate_fallback_analysis(report_text, language='English'):
+    """
+    Rule-based fallback when AI fails. Parses real medical values from report text
+    and provides evidence-based insights. NOT dummy data.
+    """
+    import re
+
+    KNOWN_RANGES = {
+        'hemoglobin': {'unit': 'g/dL', 'low': 12, 'high': 16, 'male_low': 13.5, 'male_high': 17.5},
+        'hb': {'unit': 'g/dL', 'low': 12, 'high': 16, 'male_low': 13.5, 'male_high': 17.5},
+        'wbc': {'unit': '/uL', 'low': 4000, 'high': 11000},
+        'white blood cell': {'unit': '/uL', 'low': 4000, 'high': 11000},
+        'platelets': {'unit': '/uL', 'low': 150000, 'high': 400000},
+        'platelet': {'unit': '/uL', 'low': 150000, 'high': 400000},
+        'blood sugar': {'unit': 'mg/dL', 'low': 70, 'high': 140},
+        'glucose': {'unit': 'mg/dL', 'low': 70, 'high': 140},
+        'fasting glucose': {'unit': 'mg/dL', 'low': 70, 'high': 100},
+        'random glucose': {'unit': 'mg/dL', 'low': 70, 'high': 140},
+        'hba1c': {'unit': '%', 'low': 4, 'high': 5.7},
+        'hba 1c': {'unit': '%', 'low': 4, 'high': 5.7},
+        'glycated hemoglobin': {'unit': '%', 'low': 4, 'high': 5.7},
+        'cholesterol': {'unit': 'mg/dL', 'low': 0, 'high': 200},
+        'total cholesterol': {'unit': 'mg/dL', 'low': 0, 'high': 200},
+        'hdl': {'unit': 'mg/dL', 'low': 40, 'high': 999},
+        'ldl': {'unit': 'mg/dL', 'low': 0, 'high': 100},
+        'triglycerides': {'unit': 'mg/dL', 'low': 0, 'high': 150},
+        'creatinine': {'unit': 'mg/dL', 'low': 0.6, 'high': 1.2},
+        'urea': {'unit': 'mg/dL', 'low': 10, 'high': 50},
+        'bun': {'unit': 'mg/dL', 'low': 7, 'high': 20},
+        'sgpt': {'unit': 'U/L', 'low': 5, 'high': 40},
+        'alt': {'unit': 'U/L', 'low': 5, 'high': 40},
+        'sgot': {'unit': 'U/L', 'low': 8, 'high': 33},
+        'ast': {'unit': 'U/L', 'low': 8, 'high': 33},
+        'tsh': {'unit': 'mIU/L', 'low': 0.4, 'high': 4.0},
+        'vitamin d': {'unit': 'ng/mL', 'low': 30, 'high': 100},
+        'vitamin d3': {'unit': 'ng/mL', 'low': 30, 'high': 100},
+        'calcium': {'unit': 'mg/dL', 'low': 8.5, 'high': 10.5},
+        'iron': {'unit': 'ug/dL', 'low': 60, 'high': 170},
+        'bilirubin': {'unit': 'mg/dL', 'low': 0.1, 'high': 1.2},
+        'crp': {'unit': 'mg/L', 'low': 0, 'high': 5},
+        'esr': {'unit': 'mm/hr', 'low': 0, 'high': 20},
+    }
+
+    EXPLANATIONS = {
+        'hemoglobin': 'Hemoglobin carries oxygen in blood. Low levels indicate anemia, causing fatigue and weakness.',
+        'hb': 'Hemoglobin carries oxygen in blood. Low levels indicate anemia, causing fatigue and weakness.',
+        'wbc': 'White blood cells fight infection. High levels may indicate infection or inflammation.',
+        'white blood cell': 'White blood cells fight infection. High levels may indicate infection or inflammation.',
+        'platelets': 'Platelets help blood clot. Low levels increase bleeding risk.',
+        'blood sugar': 'Blood sugar indicates diabetes risk. High levels suggest diabetes or pre-diabetes.',
+        'glucose': 'Blood glucose indicates diabetes risk. High levels suggest diabetes or pre-diabetes.',
+        'hba1c': 'HBA1C shows average blood sugar over 3 months. Above 5.7% indicates pre-diabetes.',
+        'cholesterol': 'Total cholesterol above 200 mg/dL increases heart disease risk.',
+        'hdl': 'HDL is good cholesterol. Low levels increase heart disease risk.',
+        'ldl': 'LDL is bad cholesterol. High levels increase heart disease and stroke risk.',
+        'triglycerides': 'High triglycerides increase heart disease and pancreatitis risk.',
+        'creatinine': 'Creatinine indicates kidney function. High levels suggest kidney problems.',
+        'sgpt': 'SGPT/ALT indicates liver health. Elevated levels suggest liver damage.',
+        'alt': 'ALT indicates liver health. Elevated levels suggest liver damage.',
+        'sgot': 'SGOT/AST indicates liver and heart health. Elevated levels suggest tissue damage.',
+        'ast': 'AST indicates liver and heart health. Elevated levels suggest tissue damage.',
+        'tsh': 'TSH indicates thyroid function. High levels suggest hypothyroidism, low levels suggest hyperthyroidism.',
+        'vitamin d': 'Vitamin D is essential for bone health. Low levels cause bone weakness.',
+        'vitamin d3': 'Vitamin D is essential for bone health. Low levels cause bone weakness.',
+        'calcium': 'Calcium is vital for bones and nerve function. Abnormal levels need attention.',
+        'iron': 'Iron is essential for hemoglobin. Low levels cause anemia.',
+        'bilirubin': 'Bilirubin indicates liver function. High levels may cause jaundice.',
+        'crp': 'CRP indicates inflammation in the body. High levels suggest infection or autoimmune conditions.',
+        'esr': 'ESR indicates inflammation. High levels suggest infection or chronic disease.',
+    }
+
+    text_lower = report_text.lower()
+    abnormal_findings = []
+    risk_level = 'Low'
+
+    for param, info in KNOWN_RANGES.items():
+        patterns = [
+            rf'{param}[\s:]+(\d+\.?\d*)',
+            rf'{param}[\s\-–]+(\d+\.?\d*)',
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, text_lower)
+            if match:
+                value = float(match.group(1))
+                low = info.get('low', 0)
+                high = info.get('high', 999)
+                if value < low or value > high:
+                    if value < low:
+                        severity = 'severe' if value < low * 0.6 else 'moderate' if value < low * 0.8 else 'mild'
+                        status = 'Low'
+                    else:
+                        severity = 'severe' if value > high * 1.5 else 'moderate' if value > high * 1.2 else 'mild'
+                        status = 'High'
+                    if severity in ('severe', 'moderate'):
+                        risk_level = 'High'
+                    elif risk_level != 'High' and severity == 'mild':
+                        risk_level = 'Medium'
+                    abnormal_findings.append({
+                        'parameter': param.title(),
+                        'value': f'{value} {info["unit"]}',
+                        'normal_range': f'{low} - {high} {info["unit"]}',
+                        'severity': severity,
+                        'simple_explanation': EXPLANATIONS.get(param, f'{param} is {status} than normal range.')
+                    })
+                break
+
+    if not abnormal_findings:
+        summary = 'Based on the extracted report text, no明显 abnormal values were detected by the rule-based analysis. However, this is not a substitute for professional medical review. Please consult a doctor for a comprehensive evaluation.'
+    else:
+        params = ', '.join([f['parameter'] for f in abnormal_findings])
+        summary = f'The report shows {len(abnormal_findings)} abnormal finding(s): {params}. {abnormal_findings[0]["simple_explanation"]} Please consult a healthcare professional for proper evaluation.'
+
+    recommendations = [
+        'Maintain a balanced diet rich in fruits, vegetables, and whole grains',
+        'Stay hydrated — drink at least 2-3 liters of water daily',
+        'Exercise regularly — at least 30 minutes of moderate activity daily',
+        'Get adequate sleep — 7-8 hours per night',
+        'Follow up with your doctor for a complete clinical evaluation',
+    ]
+
+    if risk_level == 'High':
+        doctor_suggestion = 'Consult a doctor as soon as possible. The report shows values that need medical attention. Do not ignore these findings.'
+    elif risk_level == 'Medium':
+        doctor_suggestion = 'Schedule a doctor visit within 1-2 weeks. Some values are outside the normal range and should be evaluated.'
+    else:
+        doctor_suggestion = 'Continue regular health checkups. No urgent medical attention needed based on this analysis, but consult your doctor for a complete review.'
+
+    if language == 'Kannada':
+        summary_kn = summary  # Keep English for now, can be translated later
+        return {
+            'patient_summary': summary_kn,
+            'abnormal_findings': abnormal_findings if abnormal_findings else [{'parameter': 'No Abnormalities Detected', 'value': 'N/A', 'normal_range': 'N/A', 'severity': 'low', 'simple_explanation': 'No明显 abnormal values were detected by rule-based analysis. Please consult a doctor for professional evaluation.'}],
+            'risk_level': risk_level,
+            'lifestyle_recommendations': recommendations,
+            'doctor_visit_suggestion': doctor_suggestion
+        }
+
+    return {
+        'patient_summary': summary,
+        'abnormal_findings': abnormal_findings if abnormal_findings else [{'parameter': 'No Abnormalities Detected', 'value': 'N/A', 'normal_range': 'N/A', 'severity': 'low', 'simple_explanation': 'No明显 abnormal values were detected by rule-based analysis. Please consult a doctor for professional evaluation.'}],
+        'risk_level': risk_level,
+        'lifestyle_recommendations': recommendations,
+        'doctor_visit_suggestion': doctor_suggestion
+    }
