@@ -271,7 +271,7 @@ class MedicalReport(models.Model):
         return encrypted_content
     
     def decrypt_file(self):
-        """Decrypt file for authorized viewing"""
+        """Decrypt file for authorized viewing — works with local and Cloudinary storage"""
         import logging
         logger = logging.getLogger(__name__)
 
@@ -284,22 +284,28 @@ class MedicalReport(models.Model):
             return None
 
         try:
-            file_path = self.report_file.path
-        except Exception:
-            logger.error(f"Report {self.id}: Cannot resolve file path")
-            return None
+            # Read file content — works with local files and Cloudinary
+            file_url = self.report_file.url
+            logger.info(f"Report {self.id}: File URL: {file_url}")
 
-        import os
-        if not os.path.exists(file_path):
-            logger.error(f"Report {self.id}: File does not exist at {file_path}")
-            return None
+            if file_url.startswith('http'):
+                # Cloudinary or remote storage — download content
+                import requests
+                response = requests.get(file_url, timeout=30)
+                response.raise_for_status()
+                encrypted_content = response.content
+            else:
+                # Local file
+                file_path = self.report_file.path
+                import os
+                if not os.path.exists(file_path):
+                    logger.error(f"Report {self.id}: File does not exist at {file_path}")
+                    return None
+                with open(file_path, 'rb') as file:
+                    encrypted_content = file.read()
 
-        try:
-            f = Fernet(self.encrypted_file_key.encode())
-            logger.info(f"Report {self.id}: Decrypting from {file_path}, key length={len(self.encrypted_file_key)}")
-            with open(file_path, 'rb') as file:
-                encrypted_content = file.read()
             logger.info(f"Report {self.id}: Read {len(encrypted_content)} bytes, attempting decrypt")
+            f = Fernet(self.encrypted_file_key.encode())
             decrypted = f.decrypt(encrypted_content)
             logger.info(f"Report {self.id}: Decrypted successfully, {len(decrypted)} bytes")
             return decrypted

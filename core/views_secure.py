@@ -719,18 +719,24 @@ def patient_view_report(request, report_id):
             response['Content-Disposition'] = f'inline; filename="{report.title}.pdf"'
             return response
         else:
-            # Fallback: try serving the raw file in case it's not actually encrypted
+            # Fallback: try serving the raw file
             logger.warning(f"Decryption failed for report {report.id}, trying raw file")
             try:
-                with open(report.report_file.path, 'rb') as f:
-                    raw_content = f.read()
+                import requests as req_lib
+                file_url = report.report_file.url
+                if file_url.startswith('http'):
+                    resp = req_lib.get(file_url, timeout=30)
+                    raw_content = resp.content
+                else:
+                    with open(report.report_file.path, 'rb') as f:
+                        raw_content = f.read()
                 if raw_content[:5] == b'%PDF-':
                     logger.info(f"Raw file is valid PDF, serving unencrypted report {report.id}")
                     response = HttpResponse(raw_content, content_type='application/pdf')
                     response['Content-Disposition'] = f'inline; filename="{report.title}.pdf"'
                     return response
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"Raw file fallback also failed for report {report.id}: {e}")
             return Response({
                 'success': False,
                 'error': 'Failed to decrypt report. The file may be corrupted or the encryption key is invalid.'
