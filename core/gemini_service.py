@@ -1,20 +1,47 @@
-from google import genai
-from google.genai import types
-from django.conf import settings
+import requests
 import json
+from django.conf import settings
 
-# Initialize client with new SDK
-client = genai.Client(api_key=settings.GEMINI_API_KEY)
+GEMINI_API_KEY = settings.GEMINI_API_KEY
+BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models'
 
 class GeminiAIService:
     def __init__(self):
         self.model = 'gemini-1.5-flash'
 
+    def _generate(self, prompt, max_output_tokens=2048, temperature=0.2, response_mime_type=None):
+        url = f'{BASE_URL}/{self.model}:generateContent?key={GEMINI_API_KEY}'
+        payload = {
+            'contents': [{'parts': [{'text': prompt}]}],
+            'generationConfig': {
+                'maxOutputTokens': max_output_tokens,
+                'temperature': temperature,
+            }
+        }
+        if response_mime_type:
+            payload['generationConfig']['responseMimeType'] = response_mime_type
+
+        resp = requests.post(url, json=payload, timeout=60)
+        resp.raise_for_status()
+        data = resp.json()
+
+        if 'candidates' not in data or not data['candidates']:
+            error_msg = data.get('error', {}).get('message', 'No candidates in response')
+            raise Exception(f'Gemini API error: {error_msg}')
+
+        text = data['candidates'][0]['content']['parts'][0]['text']
+        return text.strip()
+
+    def _clean_json(self, text):
+        if text.startswith('```json'):
+            text = text[7:]
+        if text.startswith('```'):
+            text = text[3:]
+        if text.endswith('```'):
+            text = text[:-3]
+        return text.strip()
+
     def check_scheme_eligibility(self, patient_data):
-        """
-        Check health scheme eligibility using Gemini AI
-        Returns structured JSON response
-        """
         prompt = f"""
 You are a Government Healthcare Scheme Eligibility Expert for Karnataka and Central Government schemes.
 
@@ -27,212 +54,118 @@ Patient Details:
 - Disease Type: {patient_data.get('disease_type')}
 - Language Preference: {patient_data.get('language', 'English')}
 
-Based on this information, identify the MOST SUITABLE health scheme from Karnataka or Central Government.
+Identify the MOST SUITABLE health scheme. Consider these schemes:
+1. Pradhan Mantri Jan Arogya Yojana (PMJAY) - Central, BPL, 5 lakhs/year
+2. Vajpayee Arogyashree - Karnataka, BPL, critical illnesses
+3. Suvarna Arogya Suraksha - Karnataka, APL families
+4. Jyothi Sanjeevini Yojana - Karnataka, women and children
+5. Yashasvini Health Scheme - Karnataka, cooperative members
+6. Karnataka Arogya Raksha Scheme (KARS) - state employees
+7. Ayushman Bharat - Central, cashless for poor families
 
-Consider these major schemes:
-1. Pradhan Mantri Jan Arogya Yojana (PMJAY) - Central, for BPL families, covers 5 lakhs/year
-2. Vajpayee Arogyashree - Karnataka, for BPL families, covers critical illnesses
-3. Suvarna Arogya Suraksha - Karnataka, for APL families
-4. Jyothi Sanjeevini Yojana - Karnataka, for women and children
-5. Yashasvini Health Scheme - Karnataka, for cooperative members
-6. Karnataka Arogya Raksha Scheme (KARS) - Karnataka state employees
-7. Ayushman Bharat - Central, cashless treatment for poor families
-
-YOU MUST RETURN VALID JSON in this EXACT structure:
+Return ONLY valid JSON:
 {{
-  "scheme_name": "Name of the most suitable scheme",
+  "scheme_name": "Name",
   "scheme_type": "Karnataka or Central",
-  "eligibility_score": "XX% (your confidence in eligibility)",
-  "why_eligible": "Clear explanation why patient qualifies",
-  "required_documents": ["Document 1", "Document 2", "Document 3"],
-  "apply_steps": [
-    "Step 1: Detailed instruction",
-    "Step 2: Detailed instruction",
-    "Step 3: Detailed instruction",
-    "Step 4: Final verification"
-  ],
+  "eligibility_score": "XX%",
+  "why_eligible": "Explanation",
+  "required_documents": ["Doc 1", "Doc 2", "Doc 3"],
+  "apply_steps": ["Step 1", "Step 2", "Step 3"],
   "language_output": "{patient_data.get('language', 'English')}"
 }}
-
-CRITICAL: Return ONLY the JSON object, no extra text before or after.
 """
-
         try:
-            response = client.models.generate_content(
-                model=self.model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    max_output_tokens=1500,
-                    temperature=0.2,
-                    top_p=0.8,
-                    top_k=40,
-                    response_mime_type="application/json"
-                )
-            )
-            result_text = response.text.strip() if response.text else ""
-
-            # Clean response
-            if result_text.startswith('```json'):
-                result_text = result_text[7:]
-            if result_text.startswith('```'):
-                result_text = result_text[3:]
-            if result_text.endswith('```'):
-                result_text = result_text[:-3]
-            result_text = result_text.strip()
-            print(f"DEBUG - Full AI Response: {result_text}")
-
-            if not result_text:
-                raise Exception("Empty response from AI")
-
+            result_text = self._generate(prompt, max_output_tokens=1500, temperature=0.2, response_mime_type='application/json')
+            result_text = self._clean_json(result_text)
             result = json.loads(result_text)
-
-            required_keys = ['scheme_name', 'scheme_type', 'eligibility_score', 'why_eligible', 'required_documents', 'apply_steps']
-            for key in required_keys:
+            for key in ['scheme_name', 'scheme_type', 'eligibility_score', 'why_eligible', 'required_documents', 'apply_steps']:
                 if key not in result:
-                    raise ValueError(f"Missing required key from AI response: {key}")
-
+                    raise ValueError(f'Missing key: {key}')
             return result
-
         except json.JSONDecodeError:
-            print(f"Failed to parse Gemini JSON output for scheme prediction: {result_text}")
-            raise Exception("AI generated an invalid response. Please try again.")
+            raise Exception('AI generated invalid response. Please try again.')
         except Exception as e:
-            print(f"Gemini API Error for scheme prediction: {str(e)}")
-            raise Exception(f"Scheme prediction failed using Gemini API: {str(e)}")
+            raise Exception(f'Scheme prediction failed: {str(e)}')
 
     def analyze_medical_report(self, report_text, language='English'):
-        """
-        Analyze medical report using Gemini AI
-        Returns structured JSON with findings
-        """
-        truncated_text = report_text[:4000] + "..." if len(report_text) > 4000 else report_text
+        truncated_text = report_text[:4000] + '...' if len(report_text) > 4000 else report_text
 
         prompt = f"""
-You are a highly qualified medical AI assistant. Analyze the following medical report and respond ONLY with a valid JSON object. Do not include any markdown formatting, conversational text, or explanations outside the JSON structure.
+You are a qualified medical AI assistant. Analyze this medical report and respond ONLY with valid JSON.
 
-Language for analysis output: {language}
+Language: {language}
 
-MEDICAL REPORT CONTENT:
+MEDICAL REPORT:
 {truncated_text}
 
-REQUIRED JSON STRUCTURE:
+REQUIRED JSON:
 {{
-  "patient_summary": "A brief, easy-to-understand summary of the patient's overall health based on the report (in {language}).",
+  "patient_summary": "Brief summary in {language}",
   "abnormal_findings": [
     {{
-      "parameter": "Name of the test/parameter that is abnormal",
-      "value": "The recorded value",
-      "normal_range": "The expected normal range",
-      "severity": "mild, moderate, severe, or critical",
-      "simple_explanation": "A simple explanation of what this abnormality means (in {language})"
+      "parameter": "Test name",
+      "value": "Recorded value",
+      "normal_range": "Normal range",
+      "severity": "mild/moderate/severe/critical",
+      "simple_explanation": "Simple explanation in {language}"
     }}
   ],
-  "risk_level": "Low, Medium, or High",
-  "lifestyle_recommendations": [
-    "Specific lifestyle or dietary recommendation (in {language})"
-  ],
-  "doctor_visit_suggestion": "Recommendation on when/if to see a doctor based on these results (in {language})"
+  "risk_level": "Low/Medium/High",
+  "lifestyle_recommendations": ["Recommendation in {language}"],
+  "doctor_visit_suggestion": "When to see doctor in {language}"
 }}
 
-CRITICAL INSTRUCTION: Return ONLY the raw JSON object. Do not use ```json blocks.
+Return ONLY the JSON object.
 """
-
         try:
-            response = client.models.generate_content(
-                model=self.model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    max_output_tokens=2048,
-                    temperature=0.2,
-                    top_p=0.8,
-                    top_k=40,
-                    response_mime_type="application/json"
-                )
-            )
-            result_text = response.text.strip() if response.text else ""
-
-            if result_text.startswith('```json'):
-                result_text = result_text[7:]
-            if result_text.startswith('```'):
-                result_text = result_text[3:]
-            if result_text.endswith('```'):
-                result_text = result_text[:-3]
-            result_text = result_text.strip()
-
-            if not result_text:
-                raise Exception("Empty response from AI")
-
+            result_text = self._generate(prompt, max_output_tokens=2048, temperature=0.2, response_mime_type='application/json')
+            result_text = self._clean_json(result_text)
             result = json.loads(result_text)
-
-            required_keys = ['patient_summary', 'abnormal_findings', 'risk_level', 'lifestyle_recommendations', 'doctor_visit_suggestion']
-            for key in required_keys:
+            for key in ['patient_summary', 'abnormal_findings', 'risk_level', 'lifestyle_recommendations', 'doctor_visit_suggestion']:
                 if key not in result:
-                    raise ValueError(f"Missing required key in Gemini response: {key}")
-
+                    raise ValueError(f'Missing key: {key}')
             return result
-
-        except json.JSONDecodeError as e:
-            print(f"Failed to parse Gemini JSON output: {result_text}")
-            raise Exception("The AI generated an invalid response format. Please try again.")
+        except json.JSONDecodeError:
+            raise Exception('AI generated invalid response format. Please try again.')
         except Exception as e:
-            print(f"Gemini API Error: {str(e)}")
-            raise Exception(f"Failed to analyze report using Gemini AI: {str(e)}")
+            raise Exception(f'Failed to analyze report: {str(e)}')
 
     def recommend_best_doctor(self, report_analysis, doctors):
-        """
-        Analyze report findings and recommend the best doctor from the list.
-        """
         if not doctors:
             return None
 
-        doctor_list_str = "\n".join([
+        doctor_list = "\n".join([
             f"ID: {d.get('id')} | Name: {d.get('full_name')} | Specialty: {d.get('specialization')} | Exp: {d.get('experience_years')} yrs"
             for d in doctors
         ])
 
         prompt = f"""
-You are a medical triage expert. Based on the following AI analysis of a patient's medical report, recommend the MOST appropriate doctor from the provided list.
+Based on this patient report analysis, recommend the MOST appropriate doctor.
 
-PATIENT REPORT ANALYSIS:
+ANALYSIS:
 {json.dumps(report_analysis, indent=2)}
 
-AVAILABLE DOCTORS:
-{doctor_list_str}
+DOCTORS:
+{doctor_list}
 
-Return ONLY a JSON object with the recommended doctor ID and a brief reason.
-Example: {{"recommended_doctor_id": 123, "reason": "Appropriate specialty for findings"}}
-
-{{"recommended_doctor_id":
+Return ONLY JSON: {{"recommended_doctor_id": 123, "reason": "Why this doctor"}}
 """
         try:
-            response = client.models.generate_content(
-                model=self.model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    max_output_tokens=100,
-                    temperature=0.1
-                )
-            )
-            text = response.text.strip() if response.text else ""
+            text = self._generate(prompt, max_output_tokens=100, temperature=0.1)
+            text = self._clean_json(text)
             if not text.startswith('{'):
                 text = '{"recommended_doctor_id": ' + text
             if '}' not in text:
                 text += '}'
-
             result = json.loads(text)
             return result.get('recommended_doctor_id')
-        except Exception as e:
-            print(f"Recommendation Error: {e}")
+        except Exception:
             return doctors[0].get('id') if doctors else None
 
     def get_chat_response(self, user_message, chat_history=[], doctor_context=None):
-        """
-        Generate a medical AI chat response for patients.
-        Incorporates doctor specialization context if available.
-        """
         system_prompt = "You are a helpful medical assistant. Provide accurate, empathetic, and professional health advice."
         if doctor_context:
-            system_prompt += f" You are currently representing Dr. {doctor_context.get('full_name')} who is a {doctor_context.get('specialization')}. Keep your advice within this specialization but remain general if needed."
+            system_prompt += f" You represent Dr. {doctor_context.get('full_name')}, a {doctor_context.get('specialization')}."
 
         history_str = ""
         for msg in chat_history[-6:]:
@@ -242,34 +175,20 @@ Example: {{"recommended_doctor_id": 123, "reason": "Appropriate specialty for fi
         prompt = f"""
 {system_prompt}
 
-Recent Chat Context:
+Chat Context:
 {history_str}
 Patient: {user_message}
 
 Rules:
 1. Be concise and helpful.
-2. If the user asks for things outside medical advice, politely redirect them.
-3. ALWAYS include a disclaimer that this is AI advice and they should consult a real doctor for serious issues.
-4. Response should be plain text.
+2. Redirect non-medical questions politely.
+3. Always include a disclaimer to consult a real doctor.
+4. Plain text response.
 """
         try:
-            response = client.models.generate_content(
-                model=self.model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    max_output_tokens=500,
-                    temperature=0.7,
-                    top_p=0.9
-                )
-            )
-            if response.text:
-                return response.text.strip()
-            return "I apologize, but I'm having trouble generating a response. Please try again."
+            return self._generate(prompt, max_output_tokens=500, temperature=0.7)
         except Exception as e:
-            print(f"DEBUG GEMINI SERVICE ERROR: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            return "I apologize, but I'm having trouble connecting to my knowledge base right now. Please try again in a moment."
+            return "I apologize, but I'm having trouble connecting. Please try again in a moment."
 
-# Initialize service
+
 gemini_service = GeminiAIService()
