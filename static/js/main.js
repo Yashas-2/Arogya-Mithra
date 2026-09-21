@@ -1,4 +1,4 @@
-// ArogyaMitra AI - Main JavaScript
+// Swasthya Sakhi - Main JavaScript
 // World-class interactions and animations
 
 // CSRF Token handling for Django
@@ -71,7 +71,7 @@ const translations = {
         licenseNumber: 'License Number',
         
         // Login Page
-        loginTitle: 'ArogyaMitra AI',
+        loginTitle: 'Swasthya Sakhi',
         selectLoginType: 'Select your login type',
         patient: 'Patient',
         hospitalStaff: 'Hospital Staff',
@@ -120,7 +120,7 @@ const translations = {
         aiInterpreterTitle: 'AI Report Interpreter',
         aiInterpreterDesc: 'Don\'t understand medical terms? Our AI explains your reports in simple Kannada or English. Know what\'s abnormal, what to eat, and when to see a doctor.',
         analyzeReport: 'Analyze Report →',
-        howItWorksTitle: 'How ArogyaMitra Works',
+        howItWorksTitle: 'How Swasthya Sakhi Works',
         enterDetails: 'Enter Details',
         enterDetailsDesc: 'Age, District, Disease Type',
         aiAnalysisStep: 'AI Analysis',
@@ -133,9 +133,9 @@ const translations = {
         premiumFeatures: 'Unlimited Uploads • Unlimited AI Analysis • No Ads • Priority Support',
         revenueText: '<i class="fas fa-fire"></i> 2,000 Users = ₹98,000 Recurring Revenue For You',
         upgradeToPremium: 'Upgrade to Premium',
-        footerTitle: 'ArogyaMitra AI',
+        footerTitle: 'Swasthya Sakhi',
         footerText: 'Empowering Karnataka Citizens with AI-Powered Health Intelligence',
-        copyright: '© 2025 ArogyaMitra AI. Made with ❤️ for Karnataka',
+        copyright: '© 2025 Swasthya Sakhi. Made with ❤️ for Karnataka',
         
         // Scheme Checker Page
         checkYourEligibility: 'Check Your <span class="gradient-text">Eligibility</span>',
@@ -999,5 +999,5 @@ window.ArogyaMitra = {
     currentLanguage: () => currentLanguage
 };
 
-console.log('🏥 ArogyaMitra AI - Healthcare Intelligence Platform Loaded');
+console.log('🏥 Swasthya Sakhi - Healthcare Intelligence Platform Loaded');
 console.log('💎 World-Class UI Activated');
