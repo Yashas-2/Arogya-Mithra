@@ -272,27 +272,39 @@ class MedicalReport(models.Model):
     
     def decrypt_file(self):
         """Decrypt file for authorized viewing"""
+        import logging
+        logger = logging.getLogger(__name__)
+
         if not self.is_encrypted or not self.encrypted_file_key:
+            logger.warning(f"Report {self.id}: is_encrypted={self.is_encrypted}, key={'present' if self.encrypted_file_key else 'MISSING'}")
             return None
+
+        if not self.report_file:
+            logger.error(f"Report {self.id}: report_file is None")
+            return None
+
+        try:
+            file_path = self.report_file.path
+        except Exception:
+            logger.error(f"Report {self.id}: Cannot resolve file path")
+            return None
+
+        import os
+        if not os.path.exists(file_path):
+            logger.error(f"Report {self.id}: File does not exist at {file_path}")
+            return None
+
         try:
             f = Fernet(self.encrypted_file_key.encode())
-            # Log file path for debugging
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.info(f"Attempting to decrypt report {self.id} from file: {self.report_file.path}")
-            with open(self.report_file.path, 'rb') as file:
+            logger.info(f"Report {self.id}: Decrypting from {file_path}, key length={len(self.encrypted_file_key)}")
+            with open(file_path, 'rb') as file:
                 encrypted_content = file.read()
-            return f.decrypt(encrypted_content)
-        except FileNotFoundError as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"File not found for report {self.id}: {self.report_file.path}")
-            return None
+            logger.info(f"Report {self.id}: Read {len(encrypted_content)} bytes, attempting decrypt")
+            decrypted = f.decrypt(encrypted_content)
+            logger.info(f"Report {self.id}: Decrypted successfully, {len(decrypted)} bytes")
+            return decrypted
         except Exception as e:
-            # Log the actual error for debugging
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"Decryption failed for report {self.id}: {str(e)}")
+            logger.error(f"Report {self.id}: Decryption FAILED: {type(e).__name__}: {e}")
             return None
 
     class Meta:

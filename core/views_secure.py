@@ -706,21 +706,31 @@ def patient_view_report(request, report_id):
     )
     
     # Decrypt and serve the file
+    from django.http import HttpResponse
+    import logging
+    logger = logging.getLogger(__name__)
+
     if report.is_encrypted:
         logger.info(f"Attempting to decrypt report {report.id}")
         decrypted_content = report.decrypt_file()
         if decrypted_content:
             logger.info(f"Successfully decrypted report {report.id}, content length: {len(decrypted_content)}")
-            # Serve the decrypted file
-            from django.http import HttpResponse
             response = HttpResponse(decrypted_content, content_type='application/pdf')
             response['Content-Disposition'] = f'inline; filename="{report.title}.pdf"'
             return response
         else:
-            # Log more details for debugging
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"Failed to decrypt report {report.id} for patient {request.user.patient_profile.id}")
+            # Fallback: try serving the raw file in case it's not actually encrypted
+            logger.warning(f"Decryption failed for report {report.id}, trying raw file")
+            try:
+                with open(report.report_file.path, 'rb') as f:
+                    raw_content = f.read()
+                if raw_content[:5] == b'%PDF-':
+                    logger.info(f"Raw file is valid PDF, serving unencrypted report {report.id}")
+                    response = HttpResponse(raw_content, content_type='application/pdf')
+                    response['Content-Disposition'] = f'inline; filename="{report.title}.pdf"'
+                    return response
+            except Exception:
+                pass
             return Response({
                 'success': False,
                 'error': 'Failed to decrypt report. The file may be corrupted or the encryption key is invalid.'

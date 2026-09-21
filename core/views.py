@@ -236,9 +236,11 @@ def analyze_medical_report(request):
         
         # Decrypt and process PDF
         report_text = ''
+        pdf_bytes = None
         try:
             decrypted = report.decrypt_file()
             if decrypted:
+                pdf_bytes = decrypted
                 reader = PyPDF2.PdfReader(io.BytesIO(decrypted))
                 text_parts = []
                 for page in reader.pages:
@@ -250,18 +252,34 @@ def analyze_medical_report(request):
         except Exception as e:
             import logging
             logging.getLogger(__name__).error(f"Text extraction failed for report {report.id}: {e}")
+
+        # If decryption failed, try raw file
+        if not pdf_bytes:
+            try:
+                with open(report.report_file.path, 'rb') as f:
+                    raw = f.read()
+                if raw[:5] == b'%PDF-':
+                    pdf_bytes = raw
+                    reader = PyPDF2.PdfReader(io.BytesIO(raw))
+                    text_parts = []
+                    for page in reader.pages:
+                        try:
+                            text_parts.append(page.extract_text() or '')
+                        except Exception:
+                            continue
+                    report_text = '\n'.join(text_parts).strip()
+            except Exception:
+                pass
         
         # If PyPDF2 failed, try PyMuPDF
-        if not report_text:
+        if not report_text and pdf_bytes:
             try:
                 import fitz
-                decrypted = report.decrypt_file()
-                if decrypted:
-                    doc = fitz.open(stream=decrypted, filetype="pdf")
-                    text_parts = []
-                    for page in doc:
-                        text_parts.append(page.get_text())
-                    report_text = '\n'.join(text_parts).strip()
+                doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+                text_parts = []
+                for page in doc:
+                    text_parts.append(page.get_text())
+                report_text = '\n'.join(text_parts).strip()
             except Exception as e:
                 import logging
                 logging.getLogger(__name__).error(f"PyMuPDF extraction failed for report {report.id}: {e}")
