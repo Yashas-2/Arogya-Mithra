@@ -8,7 +8,7 @@ client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
 class GeminiAIService:
     def __init__(self):
-        self.model = 'gemini-3.5-flash-lite'
+        self.model = 'gemini-2.0-flash'
 
     def check_scheme_eligibility(self, patient_data):
         """

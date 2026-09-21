@@ -234,8 +234,43 @@ def analyze_medical_report(request):
                 'error': 'Report file not found'
             }, status=status.HTTP_404_NOT_FOUND)
         
-        # Process PDF
-        report_text = extract_text_from_pdf(report.report_file.path)
+        # Decrypt and process PDF
+        report_text = ''
+        try:
+            decrypted = report.decrypt_file()
+            if decrypted:
+                reader = PyPDF2.PdfReader(io.BytesIO(decrypted))
+                text_parts = []
+                for page in reader.pages:
+                    try:
+                        text_parts.append(page.extract_text() or '')
+                    except Exception:
+                        continue
+                report_text = '\n'.join(text_parts).strip()
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Text extraction failed for report {report.id}: {e}")
+        
+        # If PyPDF2 failed (scanned PDF), try OCR with Tesseract
+        if not report_text:
+            try:
+                import fitz  # PyMuPDF
+                decrypted = report.decrypt_file()
+                if decrypted:
+                    doc = fitz.open(stream=decrypted, filetype="pdf")
+                    ocr_text = []
+                    for page in doc:
+                        pix = page.get_pixmap(dpi=200)
+                        img_bytes = pix.tobytes("png")
+                        from PIL import Image
+                        import io as img_io
+                        img = Image.open(img_io.BytesIO(img_bytes))
+                        import pytesseract
+                        ocr_text.append(pytesseract.image_to_string(img))
+                    report_text = '\n'.join(ocr_text).strip()
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"OCR failed for report {report.id}: {e}")
         
         if not report_text:
             return Response({
