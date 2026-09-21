@@ -142,6 +142,8 @@ CLOUDINARY_CLOUD_NAME = config('CLOUDINARY_CLOUD_NAME', default='')
 CLOUDINARY_API_KEY = config('CLOUDINARY_API_KEY', default='')
 CLOUDINARY_API_SECRET = config('CLOUDINARY_API_SECRET', default='')
 
+print(f"[SWASTHYA-CONFIG] CLOUDINARY_CLOUD_NAME: '{CLOUDINARY_CLOUD_NAME}' (len={len(CLOUDINARY_CLOUD_NAME)})")
+
 if CLOUDINARY_CLOUD_NAME:
     CLOUDINARY_STORAGE = {
         'cloud_name': CLOUDINARY_CLOUD_NAME,
@@ -156,6 +158,9 @@ if CLOUDINARY_CLOUD_NAME:
             'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
         },
     }
+    print("[SWASTHYA-CONFIG] Cloudinary storage ACTIVE")
+else:
+    print("[SWASTHYA-CONFIG] WARNING: Cloudinary NOT configured! Files will be lost on restart!")
 
 # Gemini AI Configuration
 GEMINI_API_KEY = config('GEMINI_API_KEY', default='YOUR_GEMINI_API_KEY_HERE')
