@@ -564,7 +564,7 @@ def generate_fallback_analysis(report_text, language='English'):
                 break
 
     if not abnormal_findings:
-        summary = 'Based on the extracted report text, no明显 abnormal values were detected by the rule-based analysis. However, this is not a substitute for professional medical review. Please consult a doctor for a comprehensive evaluation.'
+        summary = 'The report was processed but no specific numerical values (like hemoglobin, glucose, cholesterol etc.) could be automatically extracted from the PDF text. This may be because the report is a scanned image or uses a format that cannot be parsed automatically. Please consult a doctor for a professional evaluation of this report.'
     else:
         params = ', '.join([f['parameter'] for f in abnormal_findings])
         summary = f'The report shows {len(abnormal_findings)} abnormal finding(s): {params}. {abnormal_findings[0]["simple_explanation"]} Please consult a healthcare professional for proper evaluation.'
@@ -596,7 +596,7 @@ def generate_fallback_analysis(report_text, language='English'):
 
     return {
         'patient_summary': summary,
-        'abnormal_findings': abnormal_findings if abnormal_findings else [{'parameter': 'No Abnormalities Detected', 'value': 'N/A', 'normal_range': 'N/A', 'severity': 'low', 'simple_explanation': 'No明显 abnormal values were detected by rule-based analysis. Please consult a doctor for professional evaluation.'}],
+        'abnormal_findings': abnormal_findings if abnormal_findings else [{'parameter': 'Values Not Extractable', 'value': 'PDF text could not be parsed', 'normal_range': 'N/A', 'severity': 'low', 'simple_explanation': 'The report PDF could not be automatically parsed for numerical values. This typically happens with scanned documents or image-based PDFs. A doctor can manually review the report.'}],
         'risk_level': risk_level,
         'lifestyle_recommendations': recommendations,
         'doctor_visit_suggestion': doctor_suggestion
