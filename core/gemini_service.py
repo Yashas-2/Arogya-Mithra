@@ -21,7 +21,11 @@ class GeminiAIService:
         if response_mime_type:
             payload['generationConfig']['responseMimeType'] = response_mime_type
 
+        print(f"[SWASTHYA-GEMINI] POST {url[:80]}...")
         resp = requests.post(url, json=payload, timeout=60)
+        print(f"[SWASTHYA-GEMINI] Response status: {resp.status_code}")
+        if resp.status_code != 200:
+            print(f"[SWASTHYA-GEMINI] Error body: {resp.text[:500]}")
         resp.raise_for_status()
         data = resp.json()
 

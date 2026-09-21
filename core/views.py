@@ -306,16 +306,16 @@ def analyze_medical_report(request):
         
         # Preprocess text to optimize for AI analysis speed
         processed_text = preprocess_medical_text(report_text)
-        import logging
-        logging.getLogger(__name__).info(f"Report {report.id}: Extracted {len(report_text)} chars, processed {len(processed_text)} chars, source will be checked next")
+        print(f"[SWASTHYA] Report {report.id}: Extracted {len(report_text)} chars, processed {len(processed_text)} chars")
         
         # Process with Gemini AI, fallback to rule-based if it fails
         try:
+            print(f"[SWASTHYA] Calling Gemini AI for report {report.id}...")
             analysis_result = gemini_service.analyze_medical_report(processed_text, language)
             source = 'AI'
+            print(f"[SWASTHYA] Gemini AI SUCCESS for report {report.id}")
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f"Gemini AI failed for report {report.id}: {type(e).__name__}: {e}")
+            print(f"[SWASTHYA] Gemini AI FAILED for report {report.id}: {type(e).__name__}: {e}")
             analysis_result = generate_fallback_analysis(processed_text, language)
             source = 'rule-based'
         
