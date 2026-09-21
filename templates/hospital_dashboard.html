@@ -537,7 +537,7 @@
                 if (data.success) {
                     const tbody = document.getElementById('historyBody');
                     if (data.data.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: rgba(255,255,255,0.5);">No uploads yet</td></tr>';
+                        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: rgba(255,255,255,0.5);">No uploads yet</td></tr>';
                         return;
                     }
                     
@@ -552,13 +552,18 @@
                                     ${report.is_analyzed ? 'Analyzed' : 'Pending'}
                                 </span>
                             </td>
+                            <td>
+                                <button onclick="deleteReport(${report.id}, '${report.title.replace(/'/g, "\\'")}')" class="btn" style="background: rgba(239,68,68,0.2); color: #ef4444; font-size: 0.8rem; padding: 0.3rem 0.7rem;">
+                                    <i class="fas fa-trash"></i> Delete
+                                </button>
+                            </td>
                         </tr>
                     `).join('');
                     
                     // Add a note to remind staff that patients need to verify via OTP
                     const noteRow = document.createElement('tr');
                     noteRow.innerHTML = `
-                        <td colspan="5" style="text-align: center; padding: 1rem; background: rgba(16, 185, 129, 0.05); border-top: 2px solid rgba(16, 185, 129, 0.2);">
+                        <td colspan="6" style="text-align: center; padding: 1rem; background: rgba(16, 185, 129, 0.05); border-top: 2px solid rgba(16, 185, 129, 0.2);">
                             <small style="color: rgba(255,255,255,0.7);">
                                 <i class="fas fa-info-circle"></i> Note: Patients must verify via OTP to access these reports in their vault
                             </small>
@@ -568,6 +573,30 @@
                 }
             } catch (error) {
                 console.error('Failed to load history:', error);
+            }
+        }
+
+        // Delete report
+        async function deleteReport(reportId, title) {
+            if (!confirm('Delete "' + title + '"? This cannot be undone.')) return;
+            try {
+                const authToken = localStorage.getItem('authToken');
+                const headers = {};
+                if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
+
+                const response = await fetch('/api/hospital/delete-report/' + reportId + '/', {
+                    method: 'DELETE',
+                    headers: headers
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showSuccess(data.message);
+                    loadHistory();
+                } else {
+                    showError(data.error || 'Failed to delete');
+                }
+            } catch (error) {
+                showError('Failed to delete report');
             }
         }
 

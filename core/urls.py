@@ -43,6 +43,7 @@ urlpatterns = [
     # Hospital Staff APIs (RBAC Protected)
     path('api/hospital/upload-report/', views_secure.hospital_upload_report, name='hospital_upload'),
     path('api/hospital/upload-history/', views_secure.hospital_upload_history, name='hospital_history'),
+    path('api/hospital/delete-report/<int:report_id>/', views_secure.hospital_delete_report, name='hospital_delete_report'),
     
     # Patient OTP & Report Access APIs (RBAC Protected)
     path('api/patient/request-otp/', views_secure.request_otp, name='request_otp'),

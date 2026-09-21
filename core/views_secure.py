@@ -497,6 +497,28 @@ def hospital_upload_history(request):
     return Response({'success': True, 'data': data})
 
 
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def hospital_delete_report(request, report_id):
+    """Hospital staff deletes a report they uploaded"""
+    if not hasattr(request.user, 'hospital_staff'):
+        return Response({'success': False, 'error': 'Unauthorized'}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        report = MedicalReport.objects.get(id=report_id, uploaded_by_staff=request.user.hospital_staff)
+    except MedicalReport.DoesNotExist:
+        return Response({'success': False, 'error': 'Report not found or not uploaded by you'}, status=status.HTTP_404_NOT_FOUND)
+
+    # Delete the file from storage
+    if report.report_file:
+        report.report_file.delete(save=False)
+
+    title = report.title
+    report.delete()
+
+    return Response({'success': True, 'message': f'Report "{title}" deleted successfully'})
+
+
 # ============= PATIENT - OTP VERIFICATION & REPORT ACCESS =============
 
 @api_view(['POST'])
