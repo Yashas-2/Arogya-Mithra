@@ -25,6 +25,7 @@ dj-database-url==2.1.0
 cryptography==43.0.3
 django-cloudinary-storage
 cloudinary
+requests
 
 # Development
 django-cors-headers==4.4.0
