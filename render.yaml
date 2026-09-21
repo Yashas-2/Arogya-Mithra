@@ -1,29 +1,24 @@
 services:
   - type: web
-    name: arogyamitra-backend
-    env: python
-    buildCommand: "./render-build.sh"
-    startCommand: "gunicorn arogyamitra.wsgi:application"
+    name: swasthya-sakhi
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn arogyamitra.wsgi:application
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.10.13
-      - key: DJANGO_SETTINGS_MODULE
-        value: arogyamitra.settings
-      - key: DEBUG
-        value: "False"
-      - key: ALLOWED_HOSTS
-        value: "arogyamitra-backend.onrender.com,localhost"
-      - key: CORS_ALLOWED_ORIGINS
-        value: "https://your-netlify-site.netlify.app"
-      - key: GEMINI_API_KEY
-        value: "YOUR_KEY_HERE"
       - key: SECRET_KEY
         generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: GEMINI_API_KEY
+        sync: false
       - key: DATABASE_URL
         fromDatabase:
-          name: arogyamitra-db
+          name: swasthya-sakhi-db
           property: connectionString
+      - key: ALLOWED_HOSTS
+        value: ".onrender.com"
 
 databases:
-  - name: arogyamitra-db
+  - name: swasthya-sakhi-db
     plan: free
+    databaseName: swasthya_sakhi
