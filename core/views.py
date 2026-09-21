@@ -251,26 +251,20 @@ def analyze_medical_report(request):
             import logging
             logging.getLogger(__name__).error(f"Text extraction failed for report {report.id}: {e}")
         
-        # If PyPDF2 failed (scanned PDF), try OCR with Tesseract
+        # If PyPDF2 failed, try PyMuPDF
         if not report_text:
             try:
-                import fitz  # PyMuPDF
+                import fitz
                 decrypted = report.decrypt_file()
                 if decrypted:
                     doc = fitz.open(stream=decrypted, filetype="pdf")
-                    ocr_text = []
+                    text_parts = []
                     for page in doc:
-                        pix = page.get_pixmap(dpi=200)
-                        img_bytes = pix.tobytes("png")
-                        from PIL import Image
-                        import io as img_io
-                        img = Image.open(img_io.BytesIO(img_bytes))
-                        import pytesseract
-                        ocr_text.append(pytesseract.image_to_string(img))
-                    report_text = '\n'.join(ocr_text).strip()
+                        text_parts.append(page.get_text())
+                    report_text = '\n'.join(text_parts).strip()
             except Exception as e:
                 import logging
-                logging.getLogger(__name__).error(f"OCR failed for report {report.id}: {e}")
+                logging.getLogger(__name__).error(f"PyMuPDF extraction failed for report {report.id}: {e}")
         
         if not report_text:
             return Response({
