@@ -274,6 +274,7 @@ class MedicalReport(models.Model):
         """Decrypt file for authorized viewing — works with Cloudinary, local, and any storage backend"""
         import io
         import logging
+        import requests as http_requests
         logger = logging.getLogger(__name__)
 
         if not self.is_encrypted or not self.encrypted_file_key:
@@ -286,24 +287,51 @@ class MedicalReport(models.Model):
 
         encrypted_content = None
 
-        # Method 1: Cloudinary signed URL
+        # Method 1: Cloudinary signed URL (strip 'media/' prefix if present)
         try:
             import cloudinary.utils
+            file_name = self.report_file.name
+            # Strip 'media/' prefix that Django MEDIA_ROOT adds
+            if file_name.startswith('media/'):
+                file_name = file_name[6:]
+            logger.info(f"Report {self.id}: Cloudinary public_id = {file_name}")
+
+            # Try 'upload' type (public) with signing
             url, _ = cloudinary.utils.cloudinary_url(
-                self.report_file.name,
+                file_name,
                 resource_type='raw',
-                type='authenticated',
+                type='upload',
                 sign_url=True
             )
-            import requests
-            resp = requests.get(url, timeout=30)
+            logger.info(f"Report {self.id}: Trying signed URL: {url[:80]}...")
+            resp = http_requests.get(url, timeout=30)
             resp.raise_for_status()
             encrypted_content = resp.content
             logger.info(f"Report {self.id}: Read {len(encrypted_content)} bytes via Cloudinary signed URL")
         except Exception as e:
             logger.warning(f"Report {self.id}: Cloudinary signed URL failed: {e}")
 
-        # Method 2: Storage backend open()
+        # Method 2: Cloudinary private type
+        if not encrypted_content:
+            try:
+                import cloudinary.utils
+                file_name = self.report_file.name
+                if file_name.startswith('media/'):
+                    file_name = file_name[6:]
+                url, _ = cloudinary.utils.cloudinary_url(
+                    file_name,
+                    resource_type='raw',
+                    type='private',
+                    sign_url=True
+                )
+                resp = http_requests.get(url, timeout=30)
+                resp.raise_for_status()
+                encrypted_content = resp.content
+                logger.info(f"Report {self.id}: Read {len(encrypted_content)} bytes via Cloudinary private URL")
+            except Exception as e:
+                logger.warning(f"Report {self.id}: Cloudinary private URL failed: {e}")
+
+        # Method 3: Storage backend open()
         if not encrypted_content:
             try:
                 raw_file = self.report_file.open('rb')
@@ -312,16 +340,6 @@ class MedicalReport(models.Model):
                 logger.info(f"Report {self.id}: Read {len(encrypted_content)} bytes via storage backend")
             except Exception as e:
                 logger.warning(f"Report {self.id}: Storage backend failed: {e}")
-
-        # Method 3: Direct file path (local)
-        if not encrypted_content:
-            try:
-                with open(self.report_file.path, 'rb') as f:
-                    encrypted_content = f.read()
-                logger.info(f"Report {self.id}: Read {len(encrypted_content)} bytes via local file")
-            except Exception as e:
-                logger.error(f"Report {self.id}: All file access methods failed. Last error: {e}")
-                return None
 
         if not encrypted_content:
             logger.error(f"Report {self.id}: Could not read file from any source")
