@@ -201,21 +201,37 @@ def analyze_medical_report(request):
     try:
         report = get_object_or_404(MedicalReport, id=report_id, patient__user=request.user)
         
-        # This avoids re-processing the same report unnecessarily
-        # Look for existing analysis in the same language
+        # Check for cached analysis — but skip cache if it's a bad fallback result
+        force_reanalyze = request.data.get('force', False)
         existing_analysis = AIAnalysis.objects.filter(
             report=report,
             language=language
         ).first()
-        
-        if existing_analysis:
-            # Return cached analysis - NO LIMIT CHECK NEEDED
+
+        BAD_CACHE_MARKERS = [
+            'PDF text could not be parsed',
+            'Values Not Extractable',
+            'could not be automatically extracted',
+            'AI analysis was temporarily unavailable',
+        ]
+        is_bad_cache = existing_analysis and any(
+            marker in (existing_analysis.patient_summary or '')
+            for marker in BAD_CACHE_MARKERS
+        )
+
+        if existing_analysis and not force_reanalyze and not is_bad_cache:
+            # Return good cached analysis
             analysis_serializer = AIAnalysisSerializer(existing_analysis)
             return Response({
                 'success': True,
                 'data': analysis_serializer.data,
                 'cached': True
             }, status=status.HTTP_200_OK)
+
+        if is_bad_cache or force_reanalyze:
+            # Delete the stale/bad cached analysis so it gets regenerated
+            existing_analysis.delete()
+            print(f"[SWASTHYA] Report {report.id}: deleted stale cached analysis, will re-run")
             
         # --- NEW ANALYSIS REQUIRED ---
         # NOW we check subscription limits before proceeding with Gemini call
@@ -451,8 +467,9 @@ def generate_fallback_analysis(report_text, language='English', gemini_fail_reas
     import re
 
     KNOWN_RANGES = {
-        'hemoglobin': {'unit': 'g/dL', 'low': 12, 'high': 16, 'male_low': 13.5, 'male_high': 17.5},
-        'hb': {'unit': 'g/dL', 'low': 12, 'high': 16, 'male_low': 13.5, 'male_high': 17.5},
+        # ── Blood Parameters ──
+        'hemoglobin': {'unit': 'g/dL', 'low': 12, 'high': 16},
+        'hb': {'unit': 'g/dL', 'low': 12, 'high': 16},
         'wbc': {'unit': '/uL', 'low': 4000, 'high': 11000},
         'white blood cell': {'unit': '/uL', 'low': 4000, 'high': 11000},
         'platelets': {'unit': '/uL', 'low': 150000, 'high': 400000},
@@ -460,9 +477,7 @@ def generate_fallback_analysis(report_text, language='English', gemini_fail_reas
         'blood sugar': {'unit': 'mg/dL', 'low': 70, 'high': 140},
         'glucose': {'unit': 'mg/dL', 'low': 70, 'high': 140},
         'fasting glucose': {'unit': 'mg/dL', 'low': 70, 'high': 100},
-        'random glucose': {'unit': 'mg/dL', 'low': 70, 'high': 140},
         'hba1c': {'unit': '%', 'low': 4, 'high': 5.7},
-        'hba 1c': {'unit': '%', 'low': 4, 'high': 5.7},
         'glycated hemoglobin': {'unit': '%', 'low': 4, 'high': 5.7},
         'cholesterol': {'unit': 'mg/dL', 'low': 0, 'high': 200},
         'total cholesterol': {'unit': 'mg/dL', 'low': 0, 'high': 200},
@@ -484,6 +499,15 @@ def generate_fallback_analysis(report_text, language='English', gemini_fail_reas
         'bilirubin': {'unit': 'mg/dL', 'low': 0.1, 'high': 1.2},
         'crp': {'unit': 'mg/L', 'low': 0, 'high': 5},
         'esr': {'unit': 'mm/hr', 'low': 0, 'high': 20},
+        # ── Oncology / Pathology Parameters ──
+        'ki-67': {'unit': '%', 'low': 0, 'high': 15},
+        'ki67': {'unit': '%', 'low': 0, 'high': 15},
+        'ki 67': {'unit': '%', 'low': 0, 'high': 15},
+        'proliferation index': {'unit': '%', 'low': 0, 'high': 15},
+        'er': {'unit': '%', 'low': 1, 'high': 100},   # ER positivity — any % is 'positive'
+        'pr': {'unit': '%', 'low': 1, 'high': 100},   # PR positivity
+        'tumor size': {'unit': 'cm', 'low': 0, 'high': 2.0},
+        'greatest dimension': {'unit': 'cm', 'low': 0, 'high': 2.0},
     }
 
     EXPLANATIONS = {
@@ -512,6 +536,15 @@ def generate_fallback_analysis(report_text, language='English', gemini_fail_reas
         'bilirubin': 'Bilirubin indicates liver function. High levels may cause jaundice.',
         'crp': 'CRP indicates inflammation in the body. High levels suggest infection or autoimmune conditions.',
         'esr': 'ESR indicates inflammation. High levels suggest infection or chronic disease.',
+        # Oncology
+        'ki-67': 'Ki-67 is a proliferation marker. Values above 15% indicate rapidly dividing (aggressive) tumor cells — discuss with your oncologist.',
+        'ki67': 'Ki-67 is a proliferation marker. Values above 15% indicate rapidly dividing (aggressive) tumor cells — discuss with your oncologist.',
+        'ki 67': 'Ki-67 is a proliferation marker. Values above 15% indicate rapidly dividing (aggressive) tumor cells — discuss with your oncologist.',
+        'proliferation index': 'Proliferation index reflects how fast tumor cells are dividing. High values mean a more aggressive tumor.',
+        'er': 'Estrogen Receptor (ER) positivity means the tumor may respond to hormone therapy (e.g. tamoxifen). Higher % = better response expected.',
+        'pr': 'Progesterone Receptor (PR) positivity also suggests hormone therapy may be effective.',
+        'tumor size': 'Tumor size is a key staging factor. Tumors > 2 cm are typically classified as T2 or higher.',
+        'greatest dimension': 'Tumor size in the biopsy. Larger tumors may indicate more advanced disease stage.',
     }
 
     text_lower = report_text.lower()
