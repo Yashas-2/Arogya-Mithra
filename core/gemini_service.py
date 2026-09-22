@@ -9,10 +9,22 @@ class GeminiAIService:
     def __init__(self):
         self.model = 'gemini-3.6-flash'  # Updated: only model working with AQ auth keys
 
-    def _generate(self, prompt, max_output_tokens=2048, temperature=0.2, response_mime_type=None):
+    def _generate(self, prompt, max_output_tokens=2048, temperature=0.2, response_mime_type=None, document_bytes=None, mime_type='application/pdf'):
         url = f'{BASE_URL}/{self.model}:generateContent?key={GEMINI_API_KEY}'
+        
+        parts = [{'text': prompt}]
+        if document_bytes:
+            import base64
+            b64_data = base64.b64encode(document_bytes).decode('utf-8')
+            parts.append({
+                'inline_data': {
+                    'mime_type': mime_type,
+                    'data': b64_data
+                }
+            })
+
         payload = {
-            'contents': [{'parts': [{'text': prompt}]}],
+            'contents': [{'parts': parts}],
             'generationConfig': {
                 'maxOutputTokens': max_output_tokens,
                 'temperature': temperature,
@@ -92,16 +104,19 @@ Return ONLY valid JSON:
         except Exception as e:
             raise Exception(f'Scheme prediction failed: {str(e)}')
 
-    def analyze_medical_report(self, report_text, language='English'):
-        truncated_text = report_text[:4000] + '...' if len(report_text) > 4000 else report_text
+    def analyze_medical_report(self, report_text, language='English', pdf_bytes=None):
+        if report_text:
+            truncated_text = report_text[:4000] + '...' if len(report_text) > 4000 else report_text
+            content_section = f"MEDICAL REPORT TEXT:\n{truncated_text}"
+        else:
+            content_section = "MEDICAL REPORT (attached as document)."
 
         prompt = f"""
 You are a qualified medical AI assistant. Analyze this medical report and respond ONLY with valid JSON.
 
 Language: {language}
 
-MEDICAL REPORT:
-{truncated_text}
+{content_section}
 
 REQUIRED JSON:
 {{
@@ -123,7 +138,7 @@ REQUIRED JSON:
 Return ONLY the JSON object.
 """
         try:
-            result_text = self._generate(prompt, max_output_tokens=2048, temperature=0.2, response_mime_type='application/json')
+            result_text = self._generate(prompt, max_output_tokens=2048, temperature=0.2, response_mime_type='application/json', document_bytes=pdf_bytes)
             result_text = self._clean_json(result_text)
             result = json.loads(result_text)
             for key in ['patient_summary', 'abnormal_findings', 'risk_level', 'lifestyle_recommendations', 'doctor_visit_suggestion']:

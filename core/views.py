@@ -297,21 +297,29 @@ def analyze_medical_report(request):
                 import logging
                 logging.getLogger(__name__).error(f"PyMuPDF extraction failed for report {report.id}: {e}")
         
-        if not report_text:
+        # We no longer abort here if report_text is empty!
+        # If it's a scanned PDF or image, extract_text returns nothing.
+        # We will pass the raw pdf_bytes to Gemini (which has native vision/multimodal capabilities)
+        if not report_text and not pdf_bytes:
             return Response({
                 'success': False,
-                'error': 'Could not extract text from report'
+                'error': 'Could not read or extract report file'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Preprocess text to optimize for AI analysis speed
-        processed_text = preprocess_medical_text(report_text)
-        print(f"[SWASTHYA] Report {report.id}: Extracted {len(report_text)} chars, processed {len(processed_text)} chars")
+        # Preprocess text if we have it
+        processed_text = preprocess_medical_text(report_text) if report_text else ""
+        print(f"[SWASTHYA] Report {report.id}: Extracted {len(report_text)} chars")
         
         # Process with Gemini AI, fallback to rule-based if it fails
         gemini_fail_reason = None
         try:
-            print(f"[SWASTHYA] Calling Gemini AI for report {report.id}...")
-            analysis_result = gemini_service.analyze_medical_report(processed_text, language)
+            print(f"[SWASTHYA] Calling Gemini AI for report {report.id} (Multimodal)...")
+            # We pass BOTH processed_text and pdf_bytes. Gemini will use the bytes if text is missing.
+            analysis_result = gemini_service.analyze_medical_report(
+                processed_text, 
+                language=language, 
+                pdf_bytes=pdf_bytes if not processed_text else None
+            )
             source = 'AI'
             print(f"[SWASTHYA] Gemini AI SUCCESS for report {report.id}")
         except Exception as e:
