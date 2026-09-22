@@ -440,6 +440,11 @@ def hospital_upload_report(request):
         filename = f"encrypted_{uploaded_file.name}"
         report.report_file.save(filename, ContentFile(encrypted_content), save=False)
         report.save()
+        print(
+            f"[SWASTHYA-UPLOAD] Report {report.id} saved. "
+            f"report_file.name='{report.report_file.name}' "
+            f"(Cloudinary public_id will be this minus extension)"
+        )
         
         # Log upload
         ReportAccessLog.objects.create(

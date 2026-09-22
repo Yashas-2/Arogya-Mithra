@@ -7,7 +7,7 @@ BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models'
 
 class GeminiAIService:
     def __init__(self):
-        self.model = 'gemini-1.5-flash'
+        self.model = 'gemini-2.5-flash'
 
     def _generate(self, prompt, max_output_tokens=2048, temperature=0.2, response_mime_type=None):
         url = f'{BASE_URL}/{self.model}:generateContent?key={GEMINI_API_KEY}'

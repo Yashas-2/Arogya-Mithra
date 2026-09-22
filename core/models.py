@@ -271,84 +271,133 @@ class MedicalReport(models.Model):
         return encrypted_content
     
     def decrypt_file(self):
-        """Decrypt file for authorized viewing — works with Cloudinary, local, and any storage backend"""
+        """
+        Decrypt file for authorized viewing.
+
+        Cloudinary raw assets store the public_id WITHOUT the file extension.
+        e.g. file "encrypted_report.pdf" → public_id "medical_reports/2026/09/encrypted_report"
+        Passing the extension causes a 404. We strip it here before URL generation.
+
+        RawMediaCloudinaryStorage.open() is write-only and always returns 401 on read.
+        We use the Cloudinary Admin API signed download URL instead.
+        """
         import io
+        import os
         import logging
         import requests as http_requests
         logger = logging.getLogger(__name__)
 
         if not self.is_encrypted or not self.encrypted_file_key:
-            logger.warning(f"Report {self.id}: is_encrypted={self.is_encrypted}, key={'present' if self.encrypted_file_key else 'MISSING'}")
+            logger.warning(
+                f"Report {self.id}: is_encrypted={self.is_encrypted}, "
+                f"key={'present' if self.encrypted_file_key else 'MISSING'}"
+            )
             return None
 
         if not self.report_file:
-            logger.error(f"Report {self.id}: report_file is None")
+            logger.error(f"Report {self.id}: report_file field is empty")
             return None
 
         encrypted_content = None
 
-        # Method 1: Cloudinary signed URL (strip 'media/' prefix if present)
+        # Derive the Cloudinary public_id from the stored file name.
+        # Cloudinary raw public_ids NEVER include the file extension.
+        raw_name = self.report_file.name or ''
+        # Strip Django's 'media/' prefix if the storage backend prepended it
+        if raw_name.startswith('media/'):
+            raw_name = raw_name[6:]
+        # Strip file extension — critical for Cloudinary raw resource_type
+        public_id_no_ext = os.path.splitext(raw_name)[0]
+        logger.info(
+            f"Report {self.id}: stored name='{self.report_file.name}', "
+            f"derived public_id='{public_id_no_ext}'"
+        )
+
+        # ── Method 1: Signed URL — upload delivery type, extension-free public_id ──
         try:
             import cloudinary.utils
-            file_name = self.report_file.name
-            # Strip 'media/' prefix that Django MEDIA_ROOT adds
-            if file_name.startswith('media/'):
-                file_name = file_name[6:]
-            logger.info(f"Report {self.id}: Cloudinary public_id = {file_name}")
-
-            # Try 'upload' type (public) with signing
             url, _ = cloudinary.utils.cloudinary_url(
-                file_name,
+                public_id_no_ext,
                 resource_type='raw',
                 type='upload',
-                sign_url=True
+                sign_url=True,
             )
-            logger.info(f"Report {self.id}: Trying signed URL: {url[:80]}...")
+            logger.info(f"Report {self.id}: Method 1 URL: {url}")
             resp = http_requests.get(url, timeout=30)
             resp.raise_for_status()
             encrypted_content = resp.content
-            logger.info(f"Report {self.id}: Read {len(encrypted_content)} bytes via Cloudinary signed URL")
+            logger.info(
+                f"Report {self.id}: Method 1 SUCCESS — {len(encrypted_content)} bytes"
+            )
         except Exception as e:
-            logger.warning(f"Report {self.id}: Cloudinary signed URL failed: {e}")
+            logger.warning(f"Report {self.id}: Method 1 (signed upload URL) failed: {e}")
 
-        # Method 2: Cloudinary private type
+        # ── Method 2: private_download_url — Admin API signed download ──
+        # This generates a proper /v1_1/<cloud>/raw/download?public_id=... URL
+        # authenticated with api_key + timestamp + signature. Works for private assets.
         if not encrypted_content:
             try:
                 import cloudinary.utils
-                file_name = self.report_file.name
-                if file_name.startswith('media/'):
-                    file_name = file_name[6:]
-                url, _ = cloudinary.utils.cloudinary_url(
-                    file_name,
+                from django.conf import settings as dj_settings
+                url = cloudinary.utils.private_download_url(
+                    public_id_no_ext,
+                    'pdf',                 # format / extension hint for Cloudinary
                     resource_type='raw',
-                    type='private',
-                    sign_url=True
+                    type='upload',
                 )
+                logger.info(f"Report {self.id}: Method 2 URL: {url}")
                 resp = http_requests.get(url, timeout=30)
                 resp.raise_for_status()
                 encrypted_content = resp.content
-                logger.info(f"Report {self.id}: Read {len(encrypted_content)} bytes via Cloudinary private URL")
+                logger.info(
+                    f"Report {self.id}: Method 2 SUCCESS — {len(encrypted_content)} bytes"
+                )
             except Exception as e:
-                logger.warning(f"Report {self.id}: Cloudinary private URL failed: {e}")
+                logger.warning(f"Report {self.id}: Method 2 (private_download_url) failed: {e}")
 
-        # Method 3: Storage backend open()
+        # ── Method 3: Cloudinary Admin API resource fetch ──
+        # Falls back to hitting the Admin API directly with HTTP Basic auth
+        # (api_key:api_secret), which is always authoritative.
         if not encrypted_content:
             try:
-                raw_file = self.report_file.open('rb')
-                encrypted_content = raw_file.read()
-                raw_file.close()
-                logger.info(f"Report {self.id}: Read {len(encrypted_content)} bytes via storage backend")
+                from django.conf import settings as dj_settings
+                cloud_name = getattr(dj_settings, 'CLOUDINARY_CLOUD_NAME', '')
+                api_key    = getattr(dj_settings, 'CLOUDINARY_API_KEY', '')
+                api_secret = getattr(dj_settings, 'CLOUDINARY_API_SECRET', '')
+                if cloud_name and api_key and api_secret:
+                    # Build the delivery URL using the raw extension from the stored name
+                    ext = os.path.splitext(self.report_file.name)[1].lstrip('.')  # e.g. "pdf"
+                    delivery_url = (
+                        f"https://res.cloudinary.com/{cloud_name}/raw/upload/"
+                        f"{public_id_no_ext}.{ext}"
+                    )
+                    logger.info(f"Report {self.id}: Method 3 URL: {delivery_url}")
+                    resp = http_requests.get(
+                        delivery_url,
+                        auth=(api_key, api_secret),
+                        timeout=30,
+                    )
+                    resp.raise_for_status()
+                    encrypted_content = resp.content
+                    logger.info(
+                        f"Report {self.id}: Method 3 SUCCESS — {len(encrypted_content)} bytes"
+                    )
+                else:
+                    logger.warning(f"Report {self.id}: Method 3 skipped — Cloudinary credentials not configured")
             except Exception as e:
-                logger.warning(f"Report {self.id}: Storage backend failed: {e}")
+                logger.warning(f"Report {self.id}: Method 3 (Admin API fetch) failed: {e}")
 
         if not encrypted_content:
-            logger.error(f"Report {self.id}: Could not read file from any source")
+            logger.error(
+                f"Report {self.id}: All 3 methods failed. "
+                f"public_id tried='{public_id_no_ext}', stored name='{self.report_file.name}'"
+            )
             return None
 
         try:
             f = Fernet(self.encrypted_file_key.encode())
             decrypted = f.decrypt(encrypted_content)
-            logger.info(f"Report {self.id}: Decrypted successfully, {len(decrypted)} bytes")
+            logger.info(f"Report {self.id}: Decrypted successfully — {len(decrypted)} bytes")
             return decrypted
         except Exception as e:
             logger.error(f"Report {self.id}: Decryption FAILED: {type(e).__name__}: {e}")
