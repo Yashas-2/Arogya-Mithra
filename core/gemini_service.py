@@ -33,13 +33,32 @@ class GeminiAIService:
         if response_mime_type:
             payload['generationConfig']['responseMimeType'] = response_mime_type
 
-        print(f"[SWASTHYA-GEMINI] POST to model={self.model}")
-        resp = requests.post(url, json=payload, timeout=60)
-        print(f"[SWASTHYA-GEMINI] Response status: {resp.status_code}")
-        if resp.status_code != 200:
-            error_body = resp.text[:500]
-            print(f"[SWASTHYA-GEMINI] FAILED — {resp.status_code}: {error_body}")
-            resp.raise_for_status()
+        import time
+        max_retries = 3
+        for attempt in range(max_retries):
+            print(f"[SWASTHYA-GEMINI] POST to model={self.model} (Attempt {attempt + 1})")
+            try:
+                resp = requests.post(url, json=payload, timeout=60)
+                print(f"[SWASTHYA-GEMINI] Response status: {resp.status_code}")
+                
+                if resp.status_code == 200:
+                    break
+                    
+                error_body = resp.text[:500]
+                print(f"[SWASTHYA-GEMINI] FAILED — {resp.status_code}: {error_body}")
+                
+                if resp.status_code == 503 and attempt < max_retries - 1:
+                    print("[SWASTHYA-GEMINI] 503 Service Unavailable, retrying in 2 seconds...")
+                    time.sleep(2)
+                    continue
+                    
+                resp.raise_for_status()
+            except requests.exceptions.RequestException as e:
+                if attempt < max_retries - 1 and (isinstance(e, requests.exceptions.HTTPError) and e.response is not None and e.response.status_code == 503):
+                    print("[SWASTHYA-GEMINI] Caught 503 exception, retrying in 2 seconds...")
+                    time.sleep(2)
+                    continue
+                raise
         data = resp.json()
 
         if 'candidates' not in data or not data['candidates']:
