@@ -584,3 +584,113 @@ def generate_fallback_analysis(report_text, language='English'):
         'lifestyle_recommendations': recommendations,
         'doctor_visit_suggestion': doctor_suggestion
     }
+
+
+def cloudinary_diagnostic(request):
+    """Diagnostic endpoint to test Cloudinary upload/read round-trip"""
+    import io
+    import requests as http_requests
+    import cloudinary
+    import cloudinary.utils
+    import cloudinary.uploader
+    from cryptography.fernet import Fernet
+    from django.http import JsonResponse
+    from django.conf import settings
+
+    results = {}
+    cloud_name = getattr(settings, 'CLOUDINARY_CLOUD_NAME', '')
+    api_key = getattr(settings, 'CLOUDINARY_API_KEY', '')
+    api_secret = getattr(settings, 'CLOUDINARY_API_SECRET', '')
+
+    results['cloud_name'] = cloud_name
+    results['api_key_prefix'] = api_key[:6] + '...' if api_key else 'MISSING'
+    results['api_secret_prefix'] = api_secret[:4] + '...' if api_secret else 'MISSING'
+
+    if not cloud_name:
+        results['error'] = 'CLOUDINARY_CLOUD_NAME not set'
+        return JsonResponse(results)
+
+    # Generate test payload
+    key = Fernet.generate_key()
+    f_enc = Fernet(key)
+    plaintext = b"CLOUDINARY_DIAGNOSTIC_TEST"
+    encrypted = f_enc.encrypt(plaintext)
+
+    # Upload via cloudinary.uploader
+    try:
+        upload_result = cloudinary.uploader.upload(
+            io.BytesIO(encrypted),
+            public_id="medical_reports/diagnostic_test",
+            resource_type="raw",
+            overwrite=True,
+        )
+        actual_public_id = upload_result.get('public_id', '')
+        actual_secure_url = upload_result.get('secure_url', '')
+        results['upload'] = {
+            'status': 'SUCCESS',
+            'public_id': actual_public_id,
+            'secure_url': actual_secure_url,
+            'bytes': upload_result.get('bytes', 0),
+        }
+    except Exception as e:
+        results['upload'] = {'status': 'FAILED', 'error': str(e)}
+        return JsonResponse(results)
+
+    # Method 1: signed URL
+    try:
+        url, _ = cloudinary.utils.cloudinary_url(
+            actual_public_id, resource_type='raw', type='upload', sign_url=True
+        )
+        resp = http_requests.get(url, timeout=15)
+        m1 = {'url': url[:100], 'status_code': resp.status_code}
+        if resp.status_code == 200:
+            dec = f_enc.decrypt(resp.content)
+            m1['result'] = 'PASS' if dec == plaintext else 'DECRYPT_MISMATCH'
+        else:
+            m1['result'] = 'FAIL'
+            m1['body'] = resp.text[:200]
+        results['method1_signed_url'] = m1
+    except Exception as e:
+        results['method1_signed_url'] = {'result': 'EXCEPTION', 'error': str(e)}
+
+    # Method 2: storage backend open
+    try:
+        from core.models import MedicalReport
+        latest = MedicalReport.objects.order_by('-id').first()
+        if latest and latest.report_file:
+            file_name = latest.report_file.name
+            results['latest_report'] = {
+                'id': latest.id,
+                'file_name': file_name,
+                'is_encrypted': latest.is_encrypted,
+                'has_key': bool(latest.encrypted_file_key),
+            }
+            # Try open
+            try:
+                raw_file = latest.report_file.open('rb')
+                data = raw_file.read()
+                raw_file.close()
+                results['storage_open'] = {'status': 'SUCCESS', 'bytes': len(data)}
+            except Exception as e:
+                results['storage_open'] = {'status': 'FAILED', 'error': str(e)}
+        else:
+            results['latest_report'] = 'NO REPORTS FOUND'
+    except Exception as e:
+        results['storage_open'] = {'status': 'EXCEPTION', 'error': str(e)}
+
+    # Method 3: HTTP Basic auth
+    try:
+        delivery_url = f"https://res.cloudinary.com/{cloud_name}/raw/upload/{actual_public_id}"
+        resp3 = http_requests.get(delivery_url, auth=(api_key, api_secret), timeout=15)
+        m3 = {'status_code': resp3.status_code}
+        if resp3.status_code == 200:
+            dec3 = f_enc.decrypt(resp3.content)
+            m3['result'] = 'PASS' if dec3 == plaintext else 'DECRYPT_MISMATCH'
+        else:
+            m3['result'] = 'FAIL'
+            m3['body'] = resp3.text[:200]
+        results['method3_basic_auth'] = m3
+    except Exception as e:
+        results['method3_basic_auth'] = {'result': 'EXCEPTION', 'error': str(e)}
+
+    return JsonResponse(results, json_dumps_params={'indent': 2})
