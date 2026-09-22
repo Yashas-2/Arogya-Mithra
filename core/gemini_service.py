@@ -7,7 +7,7 @@ BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models'
 
 class GeminiAIService:
     def __init__(self):
-        self.model = 'gemini-2.5-flash'
+        self.model = 'gemini-3.6-flash'  # Updated: only model working with AQ auth keys
 
     def _generate(self, prompt, max_output_tokens=2048, temperature=0.2, response_mime_type=None):
         url = f'{BASE_URL}/{self.model}:generateContent?key={GEMINI_API_KEY}'
@@ -21,12 +21,13 @@ class GeminiAIService:
         if response_mime_type:
             payload['generationConfig']['responseMimeType'] = response_mime_type
 
-        print(f"[SWASTHYA-GEMINI] POST {url[:80]}...")
+        print(f"[SWASTHYA-GEMINI] POST to model={self.model}")
         resp = requests.post(url, json=payload, timeout=60)
         print(f"[SWASTHYA-GEMINI] Response status: {resp.status_code}")
         if resp.status_code != 200:
-            print(f"[SWASTHYA-GEMINI] Error body: {resp.text[:500]}")
-        resp.raise_for_status()
+            error_body = resp.text[:500]
+            print(f"[SWASTHYA-GEMINI] FAILED — {resp.status_code}: {error_body}")
+            resp.raise_for_status()
         data = resp.json()
 
         if 'candidates' not in data or not data['candidates']:

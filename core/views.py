@@ -292,14 +292,16 @@ def analyze_medical_report(request):
         print(f"[SWASTHYA] Report {report.id}: Extracted {len(report_text)} chars, processed {len(processed_text)} chars")
         
         # Process with Gemini AI, fallback to rule-based if it fails
+        gemini_fail_reason = None
         try:
             print(f"[SWASTHYA] Calling Gemini AI for report {report.id}...")
             analysis_result = gemini_service.analyze_medical_report(processed_text, language)
             source = 'AI'
             print(f"[SWASTHYA] Gemini AI SUCCESS for report {report.id}")
         except Exception as e:
-            print(f"[SWASTHYA] Gemini AI FAILED for report {report.id}: {type(e).__name__}: {e}")
-            analysis_result = generate_fallback_analysis(processed_text, language)
+            gemini_fail_reason = f"{type(e).__name__}: {str(e)[:200]}"
+            print(f"[SWASTHYA] Gemini AI FAILED for report {report.id}: {gemini_fail_reason}")
+            analysis_result = generate_fallback_analysis(processed_text, language, gemini_fail_reason)
             source = 'rule-based'
         
         # Save analysis
@@ -440,10 +442,11 @@ def preprocess_medical_text(text, max_chars=4000):
     return text
 
 
-def generate_fallback_analysis(report_text, language='English'):
+def generate_fallback_analysis(report_text, language='English', gemini_fail_reason=None):
     """
     Rule-based fallback when AI fails. Parses real medical values from report text
     and provides evidence-based insights. NOT dummy data.
+    gemini_fail_reason: string description of why Gemini failed, shown to user.
     """
     import re
 
@@ -547,10 +550,26 @@ def generate_fallback_analysis(report_text, language='English'):
                 break
 
     if not abnormal_findings:
-        summary = 'The report was processed but no specific numerical values (like hemoglobin, glucose, cholesterol etc.) could be automatically extracted from the PDF text. This may be because the report is a scanned image or uses a format that cannot be parsed automatically. Please consult a doctor for a professional evaluation of this report.'
+        if gemini_fail_reason:
+            summary = (
+                'ℹ️ AI analysis was temporarily unavailable — the report was scanned automatically using '
+                'a rule-based parser instead. No abnormal numerical values (hemoglobin, glucose, cholesterol, etc.) '
+                'were detected in the extracted text. This may mean all your values are within normal range, or the '
+                'PDF layout could not be parsed automatically. Please consult your doctor with the original report.'
+            )
+        else:
+            summary = (
+                'No specific numerical values (hemoglobin, glucose, cholesterol, etc.) could be automatically '
+                'extracted from this report. The report may be a scanned image or use a format our parser cannot read. '
+                'Please consult a doctor for a professional evaluation.'
+            )
     else:
         params = ', '.join([f['parameter'] for f in abnormal_findings])
-        summary = f'The report shows {len(abnormal_findings)} abnormal finding(s): {params}. {abnormal_findings[0]["simple_explanation"]} Please consult a healthcare professional for proper evaluation.'
+        ai_note = ' (Analysed by rule-based parser — AI was temporarily unavailable.)' if gemini_fail_reason else ''
+        summary = (
+            f'The report shows {len(abnormal_findings)} abnormal finding(s): {params}.{ai_note} '
+            f'{abnormal_findings[0]["simple_explanation"]} Please consult a healthcare professional.'
+        )
 
     recommendations = [
         'Maintain a balanced diet rich in fruits, vegetables, and whole grains',
