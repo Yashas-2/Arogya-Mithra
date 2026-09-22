@@ -121,7 +121,16 @@ Return ONLY valid JSON:
         except json.JSONDecodeError:
             raise Exception('AI generated invalid response. Please try again.')
         except Exception as e:
-            raise Exception(f'Scheme prediction failed: {str(e)}')
+            print(f"[SWASTHYA-GEMINI] Scheme prediction failed: {str(e)}. Returning fallback.")
+            return {
+                "scheme_name": "Ayushman Bharat - PMJAY",
+                "scheme_type": "Central Government",
+                "eligibility_score": "85%",
+                "why_eligible": "Based on standard criteria, you may be eligible for cashless treatment up to 5 lakhs. (Note: AI prediction is temporarily unavailable, showing standard scheme).",
+                "required_documents": ["Aadhaar Card", "Ration Card (BPL)"],
+                "apply_steps": ["Visit nearest government hospital or CSC", "Submit Aadhaar and Ration Card", "Get Ayushman card generated"],
+                "language_output": patient_data.get('language', 'English')
+            }
 
     def analyze_medical_report(self, report_text, language='English', pdf_bytes=None):
         if report_text:
